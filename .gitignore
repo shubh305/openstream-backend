@@ -140,3 +140,15 @@ vite.config.ts.timestamp-*
 
 # agents
 .agent/
+
+# Test files
+e2e_test.js
+client-test/
+prd*
+
+# Media files
+/media/
+vod/
+
+# VSCode
+.DS_Store
