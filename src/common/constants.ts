@@ -1,6 +1,4 @@
-export const APP_CONSTANTS = {
-  API_PREFIX: 'api/v1',
-  DEFAULT_PORT: 3000,
-};
-
-export const DATABASE_CONNECTION = 'DATABASE_CONNECTION';
+export const JWT_STRATEGY = 'jwt';
+export const MONGO_CONNECTION = 'DATABASE_CONNECTION';
+export const USER_MODEL = 'User';
+export const VOD_MODEL = 'Vod';
