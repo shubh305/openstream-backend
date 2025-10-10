@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  api:
+    container_name: openstream-api
+    build: .
+    restart: always
+    env_file: .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ${OPENSTREAM_VOL_PATH}:/usr/src/app/media/recordings
+    networks:
+      - octane-net
+
+networks:
+  octane-net:
+    external: true
