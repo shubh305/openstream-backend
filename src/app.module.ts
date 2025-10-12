@@ -6,6 +6,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { MediaServerModule } from './media/media-server.module';
 import { GatewayModule } from './gateway/gateway.module';
 import { AuthModule } from './auth/auth.module';
+import { AppController } from './app.controller';
 
 import * as Joi from 'joi';
 
@@ -16,7 +17,9 @@ import * as Joi from 'joi';
       validationSchema: Joi.object({
         MONGO_URI: Joi.string().required(),
         JWT_SECRET: Joi.string().required(),
+        RTMP_INGEST_URL: Joi.string().default('rtmp://localhost:1935/live'),
         PORT: Joi.number().default(3000),
+        API_PREFIX: Joi.string().default('api/v1'),
       }),
     }),
     ServeStaticModule.forRoot({
@@ -34,7 +37,7 @@ import * as Joi from 'joi';
     GatewayModule,
     AuthModule,
   ],
-  controllers: [],
+  controllers: [AppController],
   providers: [],
 })
 export class AppModule {}

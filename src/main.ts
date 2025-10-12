@@ -18,7 +18,7 @@ async function bootstrap() {
     new ValidationPipe({
       whitelist: true,
       transform: true,
-      forbidNonWhitelisted: true,
+      forbidNonWhitelisted: false,
     }),
   );
 
@@ -26,7 +26,6 @@ async function bootstrap() {
 
   app.useWebSocketAdapter(new WsAdapter(app));
 
-  // Swagger Configuration
   const config = new DocumentBuilder()
     .setTitle('OpenStream API')
     .setDescription('The OpenStream Backend API description')

@@ -1,15 +1,25 @@
-import { Controller, Get } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  ForbiddenException,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from '../auth/auth.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Vod, VodDocument } from '../media/schemas/vod.schema';
+import * as path from 'path';
+import { VideoProcessingService } from '../media/video-processing.service';
+import { AuthWebhookDto, ProcessWebhookDto } from './dto/webhook.dto';
 
 @ApiTags('Streams')
 @Controller('streams')
 export class StreamsController {
   constructor(
     private readonly authService: AuthService,
+    private readonly videoProcessingService: VideoProcessingService,
     @InjectModel(Vod.name) private vodModel: Model<VodDocument>,
   ) {}
 
@@ -60,7 +70,6 @@ export class StreamsController {
   })
   @Get('vods')
   async listVods() {
-    // Fetch from DB sorted by newest
     const vods = await this.vodModel.find().sort({ createdAt: -1 }).exec();
     return vods.map((vod) => ({
       filename: vod.filename,
@@ -68,5 +77,56 @@ export class StreamsController {
       thumbnail: vod.thumbnail,
       createdAt: vod.createdAt,
     }));
+  }
+  @Post('auth')
+  @ApiOperation({
+    summary: 'Nginx-RTMP Auth Webhook',
+    description: 'Validates stream key from Nginx-RTMP on_publish event',
+  })
+  @ApiResponse({ status: 200, description: 'Stream allowed' })
+  @ApiResponse({ status: 403, description: 'Stream denied' })
+  async onPublishLegacy(@Body() body: AuthWebhookDto) {
+    return this.validateRequest(body);
+  }
+
+  @Post('on_publish')
+  async onPublish(@Body() body: AuthWebhookDto) {
+    return this.validateRequest(body);
+  }
+
+  private async validateRequest(body: AuthWebhookDto) {
+    const streamKey = body.name;
+    const isValid = await this.authService.validateStreamKey(streamKey);
+    if (!isValid) {
+      throw new ForbiddenException('Invalid stream key');
+    }
+    return { status: 'ok' };
+  }
+
+  @Post('on_record_done')
+  onRecordDoneLegacy(@Body() body: ProcessWebhookDto) {
+    return this.onRecordDone(body);
+  }
+
+  @Post('process')
+  @ApiOperation({
+    summary: 'Nginx-RTMP Recording Hook',
+    description: 'Triggers processing when Nginx finishes recording',
+  })
+  @ApiResponse({ status: 200, description: 'Processing started' })
+  onRecordDone(@Body() body: ProcessWebhookDto) {
+    const hostPath = body.path;
+    const filename = path.basename(hostPath);
+    const containerPath = path.join('/usr/src/app/media/recordings', filename);
+
+    const streamKey = filename.split('-')[0].split('.')[0];
+
+    // Trigger processing asynchronously
+    void this.videoProcessingService.processAndSaveVideo(
+      streamKey,
+      containerPath,
+    );
+
+    return { status: 'processing_started', bridge_path: containerPath };
   }
 }

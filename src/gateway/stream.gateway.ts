@@ -8,9 +8,8 @@ import { Server, WebSocket } from 'ws';
 import { ChildProcess, spawn } from 'child_process';
 import { Logger } from '@nestjs/common';
 import * as url from 'url';
-import * as path from 'path';
-import * as fs from 'fs';
 import { IncomingMessage } from 'http';
+import { ConfigService } from '@nestjs/config';
 
 import { AuthService } from '../auth/auth.service';
 
@@ -25,7 +24,10 @@ export class StreamGateway implements OnGatewayConnection, OnGatewayDisconnect {
     { ffmpeg: ChildProcess; client?: WebSocket; timeout?: NodeJS.Timeout }
   >();
 
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
 
   async handleConnection(client: WebSocket, request: IncomingMessage) {
     this.logger.log('Client connected to ingest gateway');
@@ -44,7 +46,6 @@ export class StreamGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    // Check for existing session
     const session = this.streamSessions.get(streamKey);
     if (session) {
       this.logger.log(`Resuming existing session for stream: ${streamKey}`);
@@ -60,20 +61,16 @@ export class StreamGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    // --- New Session Setup ---
-    const rtmpUrl = `rtmp://localhost:1935/live/${streamKey}`;
+    const ingestBaseUrl = this.configService.get<string>('RTMP_INGEST_URL');
+    const rtmpUrl = `${ingestBaseUrl}/${streamKey}`;
+
     this.logger.log(
       `Starting FFmpeg for NEW stream: ${streamKey} -> ${rtmpUrl}`,
     );
 
-    const mediaRoot = path.join(__dirname, '../../media');
-    const streamDir = path.join(mediaRoot, 'live', streamKey);
-    if (!fs.existsSync(streamDir)) {
-      fs.mkdirSync(streamDir, { recursive: true });
-    }
-    const filePath = path.join(streamDir, 'index.mp4');
+    const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
 
-    const ffmpeg = spawn('ffmpeg', [
+    const ffmpeg = spawn(ffmpegPath, [
       '-i',
       'pipe:0',
       '-c:v',
@@ -82,6 +79,14 @@ export class StreamGateway implements OnGatewayConnection, OnGatewayDisconnect {
       'ultrafast',
       '-tune',
       'zerolatency',
+      '-r',
+      '30', // Force 30fps
+      '-g',
+      '30', // 1s GOP
+      '-keyint_min',
+      '30', // Hard min GOP
+      '-sc_threshold',
+      '0', // Disable scene detection
       '-c:a',
       'aac',
       '-ar',
@@ -91,16 +96,6 @@ export class StreamGateway implements OnGatewayConnection, OnGatewayDisconnect {
       '-f',
       'flv',
       rtmpUrl,
-      '-c:v',
-      'libx264',
-      '-c:a',
-      'aac',
-      '-f',
-      'mp4',
-      '-movflags',
-      'frag_keyframe+empty_moov',
-      '-y',
-      filePath,
     ]);
 
     ffmpeg.on('error', (err) => {
@@ -126,13 +121,11 @@ export class StreamGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.debug(`FFmpeg stderr: ${data.toString()}`);
     });
 
-    // Store session
     this.streamSessions.set(streamKey, { ffmpeg, client });
     this.attachMessageHandler(client, ffmpeg);
   }
 
   handleDisconnect(client: WebSocket) {
-    // Find session by client
     for (const [streamKey, session] of this.streamSessions.entries()) {
       if (session.client === client) {
         this.logger.log(

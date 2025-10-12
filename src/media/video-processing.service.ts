@@ -24,66 +24,80 @@ export class VideoProcessingService {
   async processAndSaveVideo(streamKey: string, flvPath: string) {
     this.logger.log(`Starting VOD processing for stream: ${streamKey}`);
 
-    if (!fs.existsSync(flvPath)) {
-      this.logger.error(`FLV file not found: ${flvPath}`);
-      return;
-    }
-
     const timestamp = Date.now();
     const mp4Filename = `${streamKey}-${timestamp}.mp4`;
     const mp4Path = path.join(this.vodPath, mp4Filename);
     const thumbnailFilename = `${streamKey}-${timestamp}.jpg`;
     const thumbnailPath = path.join(this.vodPath, thumbnailFilename);
 
-    // 1. Remux FLV to MP4 (Faststart for web playback)
-    try {
-      await this.runFFmpeg([
-        '-i',
-        flvPath,
-        '-c',
-        'copy',
-        '-movflags',
-        '+faststart',
-        mp4Path,
-      ]);
-      this.logger.log(`Generated VOD: ${mp4Path}`);
+    let finalMp4Path = `/vods/${mp4Filename}`;
+    let finalThumbnailPath = `/vods/${thumbnailFilename}`;
+    let duration = 0;
 
-      // 2. Generate Thumbnail (Take frame at 5s or start)
-      await this.runFFmpeg([
-        '-i',
-        mp4Path,
-        '-ss',
-        '00:00:05',
-        '-vframes',
-        '1',
-        thumbnailPath,
-      ]);
-      this.logger.log(`Generated Thumbnail: ${thumbnailPath}`);
-
-      // 3. Save Metadata to DB
-      await this.vodModel.create({
-        filename: mp4Filename,
-        path: `/vods/${mp4Filename}`,
-        thumbnail: `/vods/${thumbnailFilename}`,
-        duration: 0, // Placeholder, could analyze file to get duration
-        createdAt: new Date(),
-      });
-      this.logger.log('Saved VOD metadata to MongoDB');
-
-      // 4. Cleanup local FLV
-      // fs.unlinkSync(flvPath);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      this.logger.error(
-        `Error generating thumbnail for ${streamKey}: ${message}`,
+    if (!fs.existsSync(flvPath)) {
+      this.logger.warn(
+        `FLV file not found at ${flvPath}. Using placeholder for VOD.`,
       );
+      // Fallback: Skip FFmpeg, use placeholders
+      finalMp4Path =
+        'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+      finalThumbnailPath =
+        'https://placehold.co/640x360.png?text=Processing+Error';
+    } else {
+      // 1. Remux FLV to MP4 (Faststart for web playback)
+      try {
+        await this.runFFmpeg([
+          '-i',
+          flvPath,
+          '-c',
+          'copy',
+          '-movflags',
+          '+faststart',
+          mp4Path,
+        ]);
+        this.logger.log(`Generated VOD: ${mp4Path}`);
+
+        // 2. Generate Thumbnail (Take frame at 5s or start)
+        await this.runFFmpeg([
+          '-i',
+          mp4Path,
+          '-ss',
+          '00:00:05',
+          '-vframes',
+          '1',
+          thumbnailPath,
+        ]);
+        this.logger.log(`Generated Thumbnail: ${thumbnailPath}`);
+
+        // Cleanup local FLV
+        if (fs.existsSync(flvPath)) {
+          fs.unlinkSync(flvPath);
+          this.logger.log(`Cleaned up raw FLV: ${flvPath}`);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        this.logger.error(
+          `Error generating VOD/Thumbnail for ${streamKey}: ${message}`,
+        );
+        return;
+      }
     }
+
+    // 3. Save Metadata to DB (Happens for both Real and Placeholder)
+    await this.vodModel.create({
+      filename: mp4Filename,
+      path: finalMp4Path,
+      thumbnail: finalThumbnailPath,
+      duration: duration,
+      createdAt: new Date(),
+    });
+    this.logger.log('Saved VOD metadata to MongoDB');
   }
 
   private runFFmpeg(args: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
       // Use system ffmpeg path or configured one
-      const ffmpegPath = '/opt/homebrew/bin/ffmpeg';
+      const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
       const proc = spawn(ffmpegPath, args);
 
       proc.on('error', (err) => {
