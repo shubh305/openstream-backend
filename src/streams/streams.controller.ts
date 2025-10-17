@@ -4,7 +4,9 @@ import {
   Post,
   Body,
   ForbiddenException,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from '../auth/auth.service';
 import { InjectModel } from '@nestjs/mongoose';
@@ -43,9 +45,18 @@ export class StreamsController {
     },
   })
   @Get('ingest')
-  getIngestConfig() {
+  getIngestConfig(@Req() request: Request) {
+    const host = request.headers['host'];
+    const xForwardedProto = request.headers['x-forwarded-proto'];
+
+    const isSecure =
+      (typeof xForwardedProto === 'string' && xForwardedProto === 'https') ||
+      request.protocol === 'https';
+
+    const protocol = isSecure ? 'wss' : 'ws';
+
     return {
-      url: 'ws://localhost:3000/ingest?key={streamKey}',
+      url: `${protocol}://${host}/ingest?key={streamKey}`,
       protocol: 'flv',
       description: 'Connect via WebSocket with your Stream Key.',
     };
