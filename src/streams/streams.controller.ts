@@ -34,7 +34,7 @@ export class StreamsController {
       properties: {
         url: {
           type: 'string',
-          example: 'ws://localhost:3000/ingest?key=sk_12345',
+          example: 'ws://localhost:4000/ingest?key=sk_12345',
         },
         protocol: { type: 'string', example: 'flv' },
         description: {

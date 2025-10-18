@@ -18,7 +18,7 @@ import * as Joi from 'joi';
         MONGO_URI: Joi.string().required(),
         JWT_SECRET: Joi.string().required(),
         RTMP_INGEST_URL: Joi.string().default('rtmp://localhost:1935/live'),
-        PORT: Joi.number().default(3000),
+        PORT: Joi.number().default(4000),
         API_PREFIX: Joi.string().default('api/v1'),
       }),
     }),

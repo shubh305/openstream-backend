@@ -30,7 +30,10 @@ export class StreamGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {}
 
   async handleConnection(client: WebSocket, request: IncomingMessage) {
-    this.logger.log('Client connected to ingest gateway');
+    this.logger.log(
+      `Connection attempt received from ${request.socket.remoteAddress}`,
+    );
+    this.logger.log(`Headers: ${JSON.stringify(request.headers)}`);
 
     if (!request.url) {
       client.close(1008, 'Missing URL');

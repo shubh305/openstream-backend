@@ -26,6 +26,6 @@ COPY --from=builder /usr/src/app/dist ./dist
 # Create media directory for recordings
 RUN mkdir -p /usr/src/app/media/recordings
 
-EXPOSE 3000
+EXPOSE 4000
 
 CMD ["node", "dist/main"]
