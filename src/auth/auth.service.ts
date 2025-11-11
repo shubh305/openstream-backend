@@ -3,15 +3,19 @@ import {
   UnauthorizedException,
   OnModuleInit,
   Logger,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes } from 'crypto';
 import { UsersRepository } from '../users/users.repository';
+import { ChannelsService } from '../channels/channels.service';
 import * as bcrypt from 'bcrypt';
-import { AuthResponseDto } from './dto/auth.dto';
+import { AuthResponseDto, UpdateProfileDto } from './dto/auth.dto';
+import { Types } from 'mongoose';
 
 export interface SanitizedUser {
-  _id: any;
+  _id: Types.ObjectId;
   username: string;
   email: string;
   avatar?: string;
@@ -26,6 +30,8 @@ export class AuthService implements OnModuleInit {
   constructor(
     private readonly jwtService: JwtService,
     private readonly usersRepository: UsersRepository,
+    @Inject(forwardRef(() => ChannelsService))
+    private readonly channelsService: ChannelsService,
   ) {}
 
   async onModuleInit() {
@@ -34,12 +40,23 @@ export class AuthService implements OnModuleInit {
 
     if (!demoUser) {
       this.logger.log('Seeding database with default user: demo/password');
-      await this.usersRepository.create({
+      const newUser = await this.usersRepository.create({
         username: 'demo',
         email: 'demo@example.com',
         password: hashedPassword,
         streamKey: 'initial_key',
       });
+
+      // Create channel for demo user
+      try {
+        await this.channelsService.createChannelForUser(
+          newUser._id.toString(),
+          newUser.username,
+        );
+        this.logger.log('Created channel for demo user');
+      } catch {
+        this.logger.log('Demo channel already exists or creation skipped');
+      }
     } else {
       demoUser.password = hashedPassword;
       if (!demoUser.email) {
@@ -47,14 +64,28 @@ export class AuthService implements OnModuleInit {
       }
       await this.usersRepository.update(demoUser);
       this.logger.log('Updated demo user password and email.');
+
+      // Ensure demo user has a channel (skip if already exists)
+      try {
+        await this.channelsService.createChannelForUser(
+          demoUser._id.toString(),
+          demoUser.username,
+        );
+      } catch {
+        // Channel already exists, which is fine
+        this.logger.log('Demo channel already exists');
+      }
     }
   }
 
   async validateUser(
-    username: string,
+    identifier: string,
     pass: string,
   ): Promise<SanitizedUser | null> {
-    const user = await this.usersRepository.findByUsername(username);
+    let user = await this.usersRepository.findByUsername(identifier);
+    if (!user) {
+      user = await this.usersRepository.findByEmail(identifier);
+    }
     if (user && (await bcrypt.compare(pass, user.password))) {
       const userObj = user.toObject() as { [key: string]: any };
       delete userObj.password;
@@ -64,7 +95,7 @@ export class AuthService implements OnModuleInit {
   }
 
   login(user: SanitizedUser): AuthResponseDto {
-    const payload = { username: user.username, sub: user._id as string };
+    const payload = { username: user.username, sub: user._id.toString() };
     return {
       access_token: this.jwtService.sign(payload),
       streamKey: user.streamKey,
@@ -88,6 +119,13 @@ export class AuthService implements OnModuleInit {
       password: hashedPassword,
       streamKey,
     });
+
+    // Auto-create channel for new user
+    await this.channelsService.createChannelForUser(
+      user._id.toString(),
+      username,
+    );
+    this.logger.log(`Created channel for new user: ${username}`);
 
     const sanitizedUser: SanitizedUser = {
       _id: user._id,
@@ -127,5 +165,33 @@ export class AuthService implements OnModuleInit {
     user.streamKey = this.generateStreamKey();
     await this.usersRepository.update(user);
     return user.streamKey;
+  }
+
+  async updateProfile(
+    userId: string,
+    updateDto: UpdateProfileDto,
+  ): Promise<SanitizedUser> {
+    const user = await this.usersRepository.findOne({ _id: userId });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (updateDto.email) {
+      user.email = updateDto.email;
+    }
+    if (updateDto.avatar) {
+      user.avatar = updateDto.avatar;
+    }
+
+    await this.usersRepository.update(user);
+
+    return {
+      _id: user._id,
+      username: user.username,
+      email: user.email,
+      avatar: user.avatar,
+      streamKey: user.streamKey,
+      createdAt: user.createdAt,
+    };
   }
 }
