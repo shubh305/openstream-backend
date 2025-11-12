@@ -20,6 +20,10 @@ export class UsersRepository {
     return this.userModel.findOne({ username }).exec();
   }
 
+  async findByEmail(email: string): Promise<UserDocument | null> {
+    return this.userModel.findOne({ email }).exec();
+  }
+
   async findByStreamKey(streamKey: string): Promise<UserDocument | null> {
     return this.userModel.findOne({ streamKey }).exec();
   }
