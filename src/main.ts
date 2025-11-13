@@ -9,7 +9,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
-  const prefix = configService.get<string>('API_PREFIX') || 'api/v1';
+  const prefix = configService.get<string>('API_PREFIX') || 'api';
 
   app.setGlobalPrefix(prefix);
   app.enableCors();
@@ -31,10 +31,14 @@ async function bootstrap() {
     .setDescription('The OpenStream Backend API description')
     .setVersion('1.0')
     .addTag('Auth')
+    .addTag('Search')
+    .addTag('Channels')
+    .addTag('Videos')
+    .addTag('Analytics')
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  SwaggerModule.setup('api/docs', app, document);
 
   await app.listen(process.env.PORT ?? 4000, '0.0.0.0');
 }

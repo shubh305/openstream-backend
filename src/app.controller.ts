@@ -3,7 +3,6 @@ import { Controller, Get } from '@nestjs/common';
 @Controller()
 export class AppController {
   @Get('health')
-  @Get('health')
   getHealth(): { status: string; bridge: string; timestamp: string } {
     return {
       status: 'ok',
