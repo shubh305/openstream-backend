@@ -32,7 +32,7 @@ export class VideoProcessingService {
 
     let finalMp4Path = `/vods/${mp4Filename}`;
     let finalThumbnailPath = `/vods/${thumbnailFilename}`;
-    let duration = 0;
+    const duration = 0;
 
     if (!fs.existsSync(flvPath)) {
       this.logger.warn(
