@@ -143,6 +143,7 @@ vite.config.ts.timestamp-*
 
 # Test files
 e2e_test.js
+test/
 client-test/
 prd*
 
