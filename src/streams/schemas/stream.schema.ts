@@ -81,6 +81,9 @@ export class Stream {
   endedAt: Date | null;
 
   @Prop({ type: String, default: null })
+  streamKey: string | null;
+
+  @Prop({ type: String, default: null })
   hlsPlaybackUrl: string | null;
 
   createdAt: Date;

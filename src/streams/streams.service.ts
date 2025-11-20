@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Types } from 'mongoose';
@@ -23,6 +24,7 @@ export class StreamsService {
     private readonly usersRepository: UsersRepository,
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly logger: Logger,
   ) {}
 
   /**
@@ -192,18 +194,31 @@ export class StreamsService {
 
   /**
    * Called when RTMP publish starts (from webhook)
+   * Implements stream takeover: if user already has an active stream,
+   * end it first before starting the new one.
    */
   async onPublishStart(streamKey: string): Promise<void> {
-    const user = await this.usersRepository.findByStreamKey(
-      streamKey.replace('sk_live_', ''),
-    );
+    const cleanKey = streamKey.replace('sk_live_', '');
+    const user = await this.usersRepository.findByStreamKey(cleanKey);
     if (!user) {
       return;
     }
 
-    await this.streamsRepository.setStatus(
-      user._id.toString(),
+    const userId = user._id.toString();
+
+    const existingStream =
+      await this.streamsRepository.findActiveByUserId(userId);
+    if (existingStream) {
+      await this.streamsRepository.setStatus(userId, StreamStatus.OFFLINE);
+      this.logger.log(
+        `[StreamTakeover] Ended existing stream for user ${user.username} before starting new one`,
+      );
+    }
+
+    await this.streamsRepository.setStatusWithStreamKey(
+      userId,
       StreamStatus.LIVE,
+      cleanKey,
     );
   }
 
@@ -218,9 +233,10 @@ export class StreamsService {
       return;
     }
 
-    await this.streamsRepository.setStatus(
+    await this.streamsRepository.setStatusWithStreamKey(
       user._id.toString(),
       StreamStatus.OFFLINE,
+      null,
     );
   }
 
@@ -234,6 +250,19 @@ export class StreamsService {
       _id: stream.userId.toString(),
     });
 
+    // Construct HLS playback URL if stream is live
+    let hlsPlaybackUrl: string | null = null;
+    if (stream.status === StreamStatus.LIVE) {
+      const streamKey = stream.streamKey || user?.streamKey;
+      if (streamKey) {
+        const hlsBaseUrl = this.configService.get<string>(
+          'HLS_PLAYBACK_BASE_URL',
+          'https://octanebrew.dev/video/live',
+        );
+        hlsPlaybackUrl = `${hlsBaseUrl}/${streamKey}.m3u8`;
+      }
+    }
+
     return {
       id: stream._id.toString(),
       userId: stream.userId.toString(),
@@ -245,6 +274,7 @@ export class StreamsService {
       viewerCount: stream.viewerCount,
       startedAt: stream.startedAt?.toISOString() || null,
       latencyMode: stream.latencyMode,
+      hlsPlaybackUrl,
       creator: {
         username: user?.username || 'Unknown',
         avatarUrl: user?.avatar || '',

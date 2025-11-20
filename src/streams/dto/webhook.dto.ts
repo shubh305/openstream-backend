@@ -117,6 +117,9 @@ export class StreamResponseDto {
   @ApiProperty()
   latencyMode: string;
 
+  @ApiPropertyOptional()
+  hlsPlaybackUrl: string | null;
+
   @ApiProperty({ type: CreatorDto })
   creator: CreatorDto;
 }

@@ -102,6 +102,27 @@ export class StreamsRepository {
       .exec();
   }
 
+  async setStatusWithStreamKey(
+    userId: string,
+    status: StreamStatus,
+    streamKey: string | null,
+  ): Promise<StreamDocument | null> {
+    const updateData: Partial<Stream> = { status, streamKey };
+
+    if (status === StreamStatus.LIVE) {
+      updateData.startedAt = new Date();
+    } else if (status === StreamStatus.OFFLINE) {
+      updateData.endedAt = new Date();
+    }
+
+    return this.streamModel
+      .findOneAndUpdate({ userId: new Types.ObjectId(userId) }, updateData, {
+        new: true,
+        upsert: true,
+      })
+      .exec();
+  }
+
   async incrementViewers(id: string, amount: number): Promise<void> {
     await this.streamModel
       .findByIdAndUpdate(id, {
