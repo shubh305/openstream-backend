@@ -19,12 +19,13 @@ import { StreamDocument, StreamStatus } from './schemas/stream.schema';
 
 @Injectable()
 export class StreamsService {
+  private readonly logger = new Logger(StreamsService.name);
+
   constructor(
     private readonly streamsRepository: StreamsRepository,
     private readonly usersRepository: UsersRepository,
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
-    private readonly logger: Logger,
   ) {}
 
   /**
