@@ -18,6 +18,7 @@ interface ChatClient extends WebSocket {
   streamId?: string;
   userId?: string;
   username?: string;
+  remoteIp?: string;
 }
 
 interface JwtPayload {
@@ -60,10 +61,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const token = parameters.query.token as string;
 
       if (!streamId) {
+        this.logger.warn(
+          `Connection rejected: Missing stream ID. URL: ${request.url}`,
+        );
         client.close(1008, 'Missing stream ID');
         return;
       }
-
+      this.logger.log(
+        `Connection attempt for stream: ${streamId}, Token present: ${!!token}`,
+      );
       client.streamId = streamId;
 
       if (token) {
@@ -80,6 +86,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.roomClients.set(streamId, new Set());
       }
       this.roomClients.get(streamId)!.add(client);
+
+      // capture IP
+      const ip =
+        request.socket.remoteAddress || request.headers['x-forwarded-for'];
+      client.remoteIp = Array.isArray(ip) ? ip[0] : ip;
 
       this.logger.log(`Client connected to chat: ${streamId}`);
       this.broadcastUserCount(streamId);
@@ -158,7 +169,37 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private broadcastUserCount(streamId: string) {
     const room = this.roomClients.get(streamId);
-    const count = room?.size || 0;
+    if (!room) return;
+
+    const uniqueViewers = new Set<string>();
+
+    room.forEach((client) => {
+      if (client.userId && client.userId === streamId) {
+        return;
+      }
+
+      if (client.userId) {
+        uniqueViewers.add(client.userId);
+      } else {
+        // dedupe anonymous users
+        uniqueViewers.add(`anon-${Math.random()}`);
+      }
+    });
+
+    const identities = new Set<string>();
+    let anonCount = 0;
+
+    room.forEach((client) => {
+      if (client.userId === streamId) return;
+
+      if (client.userId) {
+        identities.add(client.userId);
+      } else {
+        anonCount++;
+      }
+    });
+
+    const count = identities.size + anonCount;
 
     this.broadcastToRoom(streamId, {
       type: 'user_count',
