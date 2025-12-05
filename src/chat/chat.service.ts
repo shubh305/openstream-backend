@@ -6,6 +6,7 @@ import {
   ChatMessageDocument,
 } from './schemas/chat-message.schema';
 import { UsersRepository } from '../users/users.repository';
+import { StreamsRepository } from '../streams/streams.repository';
 
 @Injectable()
 export class ChatService {
@@ -13,6 +14,7 @@ export class ChatService {
     @InjectModel(ChatMessage.name)
     private chatMessageModel: Model<ChatMessageDocument>,
     private readonly usersRepository: UsersRepository,
+    private readonly streamsRepository: StreamsRepository,
   ) {}
 
   /**
@@ -47,11 +49,23 @@ export class ChatService {
    * Get chat history for a stream
    */
   async getHistory(streamId: string, limit: number = 50) {
+    const stream = await this.streamsRepository.findById(streamId);
+
+    const query: {
+      streamId: Types.ObjectId;
+      deleted: boolean;
+      createdAt?: { $gte: Date };
+    } = {
+      streamId: new Types.ObjectId(streamId),
+      deleted: false,
+    };
+
+    if (stream?.startedAt) {
+      query.createdAt = { $gte: stream.startedAt };
+    }
+
     const messages = await this.chatMessageModel
-      .find({
-        streamId: new Types.ObjectId(streamId),
-        deleted: false,
-      })
+      .find(query)
       .sort({ createdAt: -1 })
       .limit(limit)
       .exec();

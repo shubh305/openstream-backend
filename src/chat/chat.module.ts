@@ -8,6 +8,7 @@ import { ChatService } from './chat.service';
 import { ChatGateway } from './chat.gateway';
 import { ChatMessage, ChatMessageSchema } from './schemas/chat-message.schema';
 import { UsersModule } from '../users/users.module';
+import { StreamsModule } from '../streams/streams.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { UsersModule } from '../users/users.module';
       inject: [ConfigService],
     }),
     forwardRef(() => UsersModule),
+    forwardRef(() => StreamsModule),
   ],
   controllers: [ChatController],
   providers: [ChatService, ChatGateway],
