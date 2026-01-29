@@ -19,6 +19,7 @@ export interface SanitizedUser {
   username: string;
   email: string;
   avatar?: string;
+  banner?: string;
   streamKey: string;
   createdAt: Date;
 }

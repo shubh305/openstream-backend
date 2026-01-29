@@ -6,12 +6,17 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Vod, VodDocument } from './schemas/vod.schema';
 
+import { StorageService } from '../storage/storage.service';
+
 @Injectable()
 export class VideoProcessingService {
   private readonly logger = new Logger(VideoProcessingService.name);
   private readonly vodPath = path.join(__dirname, '../../vod'); // Absolute path is safer
 
-  constructor(@InjectModel(Vod.name) private vodModel: Model<VodDocument>) {
+  constructor(
+    @InjectModel(Vod.name) private vodModel: Model<VodDocument>,
+    private readonly storageService: StorageService,
+  ) {
     this.ensureVodDirectory();
   }
 
@@ -68,6 +73,27 @@ export class VideoProcessingService {
           thumbnailPath,
         ]);
         this.logger.log(`Generated Thumbnail: ${thumbnailPath}`);
+
+        // 3. Upload Thumbnail to Storage Service (MinIO)
+        try {
+          const thumbnailBuffer = fs.readFileSync(thumbnailPath);
+          const uploadedUrl = await this.storageService.uploadImage(
+            thumbnailFilename,
+            thumbnailBuffer,
+            'vods',
+            'image/jpeg',
+          );
+          finalThumbnailPath = uploadedUrl;
+          this.logger.log(`Uploaded Thumbnail to Cloud: ${finalThumbnailPath}`);
+
+          if (fs.existsSync(thumbnailPath)) {
+            fs.unlinkSync(thumbnailPath);
+          }
+        } catch (uploadErr) {
+          const params =
+            uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+          this.logger.error(`Failed to upload thumbnail: ${params}`);
+        }
 
         // Cleanup local FLV
         if (fs.existsSync(flvPath)) {

@@ -17,6 +17,9 @@ export class User {
   @Prop({ required: false })
   avatar?: string;
 
+  @Prop({ required: false })
+  banner?: string;
+
   @Prop({ required: true, unique: true })
   streamKey: string;
 
