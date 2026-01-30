@@ -8,6 +8,7 @@ import { ChannelsRepository } from './channels.repository';
 import { UpdateChannelDto, ChannelResponseDto } from './dto/channel.dto';
 import { ChannelDocument, Channel } from './schemas/channel.schema';
 import { UsersRepository } from '../users/users.repository';
+import { StorageService } from '../storage/storage.service';
 
 interface MongoError extends Error {
   code?: number;
@@ -18,6 +19,7 @@ export class ChannelsService {
   constructor(
     private readonly channelsRepository: ChannelsRepository,
     private readonly usersRepository: UsersRepository,
+    private readonly storageService: StorageService,
   ) {}
 
   /**
@@ -72,9 +74,10 @@ export class ChannelsService {
       _id: channel.userId,
     });
 
-    return this.formatChannelResponse(
+    return await this.formatChannelResponse(
       channel,
       user?.avatar || null,
+      user?.banner || null,
       currentUserId,
     );
   }
@@ -95,7 +98,12 @@ export class ChannelsService {
 
     const user = await this.usersRepository.findOne({ _id: userId });
 
-    return this.formatChannelResponse(channel, user?.avatar || null, userId);
+    return await this.formatChannelResponse(
+      channel,
+      user?.avatar || null,
+      user?.banner || null,
+      userId,
+    );
   }
 
   /**
@@ -142,9 +150,10 @@ export class ChannelsService {
 
     const user = await this.usersRepository.findOne({ _id: userId });
 
-    return this.formatChannelResponse(
+    return await this.formatChannelResponse(
       updatedChannel!,
       user?.avatar || null,
+      user?.banner || null,
       userId,
     );
   }
@@ -182,9 +191,10 @@ export class ChannelsService {
 
     const user = await this.usersRepository.findOne({ _id: userId });
 
-    return this.formatChannelResponse(
+    return await this.formatChannelResponse(
       updatedChannel || channel,
       user?.avatar || null,
+      user?.banner || null,
       userId,
     );
   }
@@ -209,14 +219,25 @@ export class ChannelsService {
   /**
    * Format channel document to response DTO
    */
-  private formatChannelResponse(
+  private async signUrl(bucket: string, key?: string | null): Promise<string> {
+    if (!key) return '';
+    return this.storageService.getPresignedUrl(bucket, key);
+  }
+
+  private async formatChannelResponse(
     channel: ChannelDocument,
-    avatarUrl: string | null,
+    avatarKey: string | null,
+    bannerKey: string | null,
     currentUserId?: string,
-  ): ChannelResponseDto {
+  ): Promise<ChannelResponseDto> {
     const isOwner = currentUserId
       ? channel.userId.toString() === currentUserId
       : false;
+
+    const [avatarUrl, bannerUrl] = await Promise.all([
+      this.signUrl('avatars', avatarKey),
+      this.signUrl('banners', bannerKey || channel.bannerUrl),
+    ]);
 
     return {
       id: channel._id.toString(),
@@ -224,7 +245,7 @@ export class ChannelsService {
       name: channel.name,
       handle: channel.handle,
       description: channel.description,
-      bannerUrl: channel.bannerUrl,
+      bannerUrl: bannerUrl || '',
       avatarUrl: avatarUrl || '',
       location: channel.location,
       contactEmail: channel.contactEmail,
