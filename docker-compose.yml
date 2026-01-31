@@ -8,6 +8,8 @@ services:
       - "4000:4000"
     volumes:
       - ${OPENSTREAM_VOL_PATH}:/usr/src/app/media/recordings
+    environment:
+      - KAFKA_BROKERS=kafka:9092
     networks:
       - octane-net
 

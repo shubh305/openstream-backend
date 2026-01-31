@@ -19,6 +19,8 @@ import { MediaController } from './media.controller';
           options: {
             client: {
               brokers: [configService.get('KAFKA_BROKERS', 'localhost:8084')],
+              connectionTimeout: 10000,
+              requestTimeout: 30000,
             },
             consumer: {
               groupId: 'api-producer',
