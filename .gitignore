@@ -153,3 +153,6 @@ vod/
 
 # VSCode
 .DS_Store
+
+# Media Data
+media_data/

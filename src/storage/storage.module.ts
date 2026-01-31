@@ -13,7 +13,7 @@ import { join } from 'path';
         options: {
           package: 'storage',
           protoPath: join(__dirname, 'storage.proto'),
-          url: process.env.STORAGE_SERVICE_URL || 'localhost:50051', // Docker: storage-service:50051, Local: localhost:50051
+          url: process.env.STORAGE_SERVICE_URL || 'localhost:50051',
         },
       },
     ]),
