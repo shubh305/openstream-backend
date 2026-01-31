@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
@@ -40,6 +41,19 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.KAFKA,
+    options: {
+      client: {
+        brokers: [process.env.KAFKA_BROKERS || 'broker.octanebrew.dev:9092'],
+      },
+      consumer: {
+        groupId: 'api-consumer',
+      },
+    },
+  });
+
+  await app.startAllMicroservices();
   await app.listen(process.env.PORT ?? 4000, '0.0.0.0');
 }
 void bootstrap();

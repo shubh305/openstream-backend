@@ -77,8 +77,8 @@ export class StreamGateway
 
       this.logger.log(`Starting FFmpeg: ${streamKey} -> ${rtmpUrl}`);
 
-      // Hardcode path to ensure it matches container
-      const ffmpegPath = '/usr/bin/ffmpeg';
+      const ffmpegPath =
+        this.configService.get<string>('FFMPEG_PATH') || '/usr/bin/ffmpeg';
 
       const ffmpeg = spawn(ffmpegPath, [
         '-i',

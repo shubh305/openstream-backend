@@ -81,5 +81,6 @@ import * as Joi from 'joi';
   ],
   controllers: [AppController],
   providers: [],
+  exports: [],
 })
 export class AppModule {}
