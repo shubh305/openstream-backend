@@ -41,6 +41,8 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
+  const isSaslEnabled = !!process.env.KAFKA_SASL_USER;
+
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.KAFKA,
     options: {
@@ -48,6 +50,13 @@ async function bootstrap() {
         brokers: [process.env.KAFKA_BROKERS || 'broker.octanebrew.dev:8084'],
         connectionTimeout: 10000,
         requestTimeout: 30000,
+        sasl: isSaslEnabled
+          ? {
+              mechanism: 'plain',
+              username: process.env.KAFKA_SASL_USER!,
+              password: process.env.KAFKA_SASL_PASS!,
+            }
+          : undefined,
       },
       consumer: {
         groupId: 'api-consumer',

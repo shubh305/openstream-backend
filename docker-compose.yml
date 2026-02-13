@@ -10,6 +10,8 @@ services:
       - ${OPENSTREAM_VOL_PATH}:/usr/src/app/media/recordings
     environment:
       - KAFKA_BROKERS=kafka:9092
+      - KAFKA_SASL_USER=${KAFKA_SASL_USER}
+      - KAFKA_SASL_PASS=${KAFKA_SASL_PASS}
     networks:
       - octane-net
 
