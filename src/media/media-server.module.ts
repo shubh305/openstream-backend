@@ -14,19 +14,36 @@ import { MediaController } from './media.controller';
       {
         name: 'WORKER_SERVICE',
         imports: [ConfigModule],
-        useFactory: (configService: ConfigService) => ({
-          transport: Transport.KAFKA,
-          options: {
-            client: {
-              brokers: [configService.get('KAFKA_BROKERS', 'localhost:8084')],
-              connectionTimeout: 10000,
-              requestTimeout: 30000,
+        useFactory: (configService: ConfigService) => {
+          const saslUser = configService.get<string>('KAFKA_SASL_USER');
+          const saslPass = configService.get<string>('KAFKA_SASL_PASS');
+          return {
+            transport: Transport.KAFKA,
+            options: {
+              client: {
+                brokers: [
+                  configService.get(
+                    'KAFKA_BROKERS',
+                    'broker.octanebrew.dev:8085',
+                  ),
+                ],
+                connectionTimeout: 10000,
+                requestTimeout: 30000,
+                sasl:
+                  saslUser && saslPass
+                    ? {
+                        mechanism: 'plain',
+                        username: saslUser,
+                        password: saslPass,
+                      }
+                    : undefined,
+              },
+              consumer: {
+                groupId: 'api-producer',
+              },
             },
-            consumer: {
-              groupId: 'api-producer',
-            },
-          },
-        }),
+          };
+        },
         inject: [ConfigService],
       },
     ]),

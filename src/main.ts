@@ -47,7 +47,7 @@ async function bootstrap() {
     transport: Transport.KAFKA,
     options: {
       client: {
-        brokers: [process.env.KAFKA_BROKERS || 'broker.octanebrew.dev:8084'],
+        brokers: [process.env.KAFKA_BROKERS || 'broker.octanebrew.dev:8085'],
         connectionTimeout: 10000,
         requestTimeout: 30000,
         sasl: isSaslEnabled
