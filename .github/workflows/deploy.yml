@@ -1,0 +1,17 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: shubh305/octanebrew-platform/.github/workflows/ssh-deploy.yml@main
+    with:
+      working-directory: "~/openstream-backend"
+      compose-file: "docker-compose.yml"
+    secrets:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}

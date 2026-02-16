@@ -1,75 +1,110 @@
-# OpenStream Backend
+# OpenStream // BACKEND
 
-OpenStream Backend is a NestJS application that acts as the control plane for a live streaming platform. It manages authentication, video processing, and VOD archival, working in conjunction with an external `Nginx-RTMP` ingest service.
+**Status:** `OPERATIONAL` // **Tier:** `APPLICATION_SPOKE` // **Platform:** `OCTANEBREW_HUB`
 
-## Architecture
+**OpenStream Backend** is a high-fidelity live streaming control plane built with NestJS. It operates as a critical "spoke" in the OctaneBrew ecosystem, managing the orchestration of live video ingestion, real-time engagement, and asynchronous media archival.
 
-This service operates in **Passive Controller Mode**:
-1.  **Ingestion**: Handled by an external Nginx-RTMP service (Infrastructure).
-2.  **Auth Delegation**: Nginx sends `on_publish` webhooks to this backend to validate stream keys.
-3.  **VOD Processing**: Nginx sends `on_record_done` webhooks when a stream ends. The backend then:
-    *   Finds the recorded file (via shared volume).
-    *   Generates thumbnails.
-    *   Logs the VOD to MongoDB.
+---
 
-## Prerequisites
+## System Architecture
 
-*   **Docker** and **Docker Compose**
-*   **Node.js 20+** (for local dev)
-*   **MongoDB** (if running locally without Docker)
+The service operates in a **Reactive Orchestration Mode**, coordinating between high-speed ingestion and shared platform intelligence.
 
-## Installation
+1.  **Ingestion Authorization**: 
+    *   Mediates between the `nginx-gateway` and `rtmp-ingest` nodes.
+    *   Handles `on_publish` RTMP webhooks to validate enterprise-tier stream keys.
+2.  **Real-Time Engagement**:
+    *   Powers the persistent Chat Engine via **WebSockets (Socket.IO)**.
+3.  **Autonomous Archival**:
+    *   When recording concludes, it emits a `video.transcode` event to the shared **FFmpeg Worker** mesh.
+    *   Polls for thumbnail generation and VOD state resolution via shared MinIO buckets.
 
+### A. Unified Ingestion & Processing Pipeline
+```mermaid
+graph TD
+    subgraph "Phase 1: Ingestion/Live"
+        U[Client Upload] -->|presigned_url| S3[MinIO S3]
+        S[Live Stream] -->|RTMP| RTMP[Nginx-RTMP]
+    end
+
+    subgraph "Phase 2: Post ingestion"
+        U -->|POST /complete| OSB[OpenStream Backend]
+        RTMP -->|on_record_done| OSB
+        OSB -->|Metadata| Mongo[(MongoDB)]
+    end
+
+    subgraph "Phase 3: Real-Time Sync"
+        OSB <-->|ws/pub-sub| Chat
+    end
+```
+
+---
+
+## 📂 Directory Structure
+
+```text
+.
+├── src/
+│   ├── auth/          # JWT & Platform Authentication
+│   ├── chat/          # WebSocket
+│   ├── stream/        # RTMP Webhooks & Authorization
+│   ├── vod/           # Archival & Media Management
+│   ├── main.ts        # Entry point & Swagger Init
+│   └── app.module.ts  # Central Dependency Hub
+├── test/              # E2E & Unit Test Suites
+├── docker-compose.yml # Local Dev Infrastructure
+└── package.json       # Dependencies & Scripts
+```
+
+---
+
+## Tech Stack
+
+*   **Runtime**: Node.js v22 (NestJS Framework)
+*   **Database**: MongoDB (Mongoose) for low-latency session and VOD metadata.
+*   **Messaging**: Kafka (via `@nestjs/microservices`) for distributed event sync.
+*   **Real-time**: Socket.IO for duplex communication.
+*   **Infrastructure**: Docker, Nginx (Reverse Proxy), MinIO (via Shared Hub).
+
+---
+
+## API & Documentation
+
+*   **REST API**: Exposed at `https://openstream.octanebrew.dev/api/`
+*   **Swagger Docs**: Interactive documentation is available at **[https://openstream.octanebrew.dev/api/docs](https://openstream.octanebrew.dev/api/docs)** (Production) or `/api/docs` (Local).
+
+---
+
+## Resilience & Reliability
+
+*   **Distributed Tracing**: Support for **OpenTelemetry** to trace requests from the gateway down to the data layer.
+
+---
+
+## Deployment & CI/CD
+
+This repository utilizes the **Standardized OctaneBrew SSH-Deploy Pipeline**.
+
+*   **Workflow**: `.github/workflows/deploy.yml`
+*   **Trigger**: Merges to `main`.
+*   **Action**: Automates Docker builds and container updates on the remote enterprise core via SSH.
+
+### Local Development
 ```bash
-git clone <repo-url>
-cd openstream-backend
+# Install dependencies
 npm install
+
+# Build the application
+npm run build
+
+# Start in development mode
+npm run start:dev
 ```
 
-## Environment Configuration
+---
 
-Create a `.env` file based on `.env.example`:
+## Security
 
-```bash
-cp .env.example .env
-```
-
-**Required Variables:**
-*   `MONGO_URI`: Connection string for MongoDB.
-*   `JWT_SECRET`: Secret key for signing tokens.
-
-## Running with Docker (Recommended)
-
-The application is designed to run in a containerized environment, attached to the `octane-net` network to communicate with the Ingest Service.
-
-```bash
-# Build and start the service
-docker-compose up -d --build
-```
-
-**Note:** Ensure the `octane-net` network exists (usually created by the Platform Infrastructure repo).
-```bash
-docker network create octane-net || true
-```
-
-## Running Locally (Development)
-
-1.  **Start MongoDB** (Ensure it's running locally or accessible).
-2.  **Run the App**:
-    ```bash
-    npm run start:dev
-    ```
-3.  **Access API Docs**: Open [http://localhost:3000/api](http://localhost:3000/api).
-
-## API Documentation
-
-The API provides comprehensive Swagger documentation at `/api`.
-
-*   **Auth**: Sign up, Login, Profile.
-*   **Streams**: Webhooks (`on_publish`, `on_record_done`) and Ingest Config.
-*   **VODs**: List archived streams.
-
-## Testing
-
-*   **E2E Tests**: `npm run test:e2e`
-*   **Lint**: `npm run lint`
+*   **JWT Authorization**: All client-facing APIs require a valid platform-issued bearer token.
+*   **Service Authentication**: Internal communication with the Hub is protected via the platform-wide `SERVICE_API_KEY`.
+*   **Noir-Shield**: Protected by the global `nginx-gateway` which filters for Cloudflare IP ranges and enforces H2 protocols.
