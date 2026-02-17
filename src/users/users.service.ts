@@ -20,7 +20,7 @@ export class UsersService {
       throw new Error('User not found');
     }
     const filename = `avatar-${user._id.toString()}-${Date.now()}.jpg`; // Normalizing to jpg or keep ext
-    const key = await this.storageService.uploadImage(
+    const key = await this.storageService.upload(
       filename,
       file.buffer,
       'avatars',
@@ -41,7 +41,7 @@ export class UsersService {
       throw new Error('User not found');
     }
     const filename = `banner-${user._id.toString()}-${Date.now()}.jpg`;
-    const key = await this.storageService.uploadImage(
+    const key = await this.storageService.upload(
       filename,
       file.buffer,
       'banners',

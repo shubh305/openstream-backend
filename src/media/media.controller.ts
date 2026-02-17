@@ -5,6 +5,7 @@ import { VideoProcessingService } from './video-processing.service';
 interface ProcessedPayload {
   streamKey: string;
   filename: string;
+  path: string;
   thumbnail: string;
   duration: number;
 }

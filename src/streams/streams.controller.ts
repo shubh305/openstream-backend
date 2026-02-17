@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
+import { ConfigService } from '@nestjs/config';
 import {
   ApiTags,
   ApiOperation,
@@ -44,6 +45,7 @@ export class StreamsController {
     private readonly streamsService: StreamsService,
     private readonly authService: AuthService,
     private readonly videoProcessingService: VideoProcessingService,
+    private readonly configService: ConfigService,
     @InjectModel(Vod.name) private vodModel: Model<VodDocument>,
   ) {}
 
@@ -239,7 +241,10 @@ export class StreamsController {
   onRecordDone(@Body() body: ProcessWebhookDto) {
     const hostPath = body.path;
     const filename = path.basename(hostPath);
-    const containerPath = path.join('/usr/src/app/media/recordings', filename);
+    const volPath =
+      this.configService.get<string>('OPENSTREAM_VOL_PATH') ||
+      '/usr/src/app/media/recordings';
+    const containerPath = path.join(volPath, filename);
     const streamKey = filename.split('-')[0].split('.')[0];
 
     void this.videoProcessingService.processAndSaveVideo(

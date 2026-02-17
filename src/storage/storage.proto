@@ -3,18 +3,18 @@ syntax = "proto3";
 package storage;
 
 service StorageService {
-  rpc UploadImage (UploadImageRequest) returns (UploadImageResponse);
+  rpc Upload (UploadRequest) returns (UploadResponse);
   rpc GetPresignedUrl (GetPresignedUrlRequest) returns (GetPresignedUrlResponse);
 }
 
-message UploadImageRequest {
+message UploadRequest {
   string filename = 1;
   bytes data = 2;
-  string bucket = 3; 
+  string bucket = 3;
   string mimeType = 4;
 }
 
-message UploadImageResponse {
+message UploadResponse {
   string url = 1;
 }
 

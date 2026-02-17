@@ -33,16 +33,17 @@ export class VideoProcessingService {
   async handleProcessedVideo(payload: {
     streamKey: string;
     filename: string;
+    path: string;
     thumbnail: string;
     duration: number;
   }) {
     this.logger.log(
-      `Handling processed video for ${payload.streamKey} and ${payload.filename}`,
+      `Handling processed video for ${payload.streamKey}: ${payload.path}`,
     );
 
     await this.vodModel.create({
       filename: payload.filename,
-      path: `/vods/${payload.filename}`,
+      path: payload.path,
       thumbnail: payload.thumbnail,
       duration: payload.duration,
       createdAt: new Date(),

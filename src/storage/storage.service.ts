@@ -5,7 +5,7 @@ import { lastValueFrom } from 'rxjs';
 import { Observable } from 'rxjs';
 
 interface StorageGrpcService {
-  uploadImage(data: {
+  upload(data: {
     filename: string;
     data: Uint8Array | Buffer;
     bucket: string;
@@ -31,7 +31,7 @@ export class StorageService implements OnModuleInit {
       this.client.getService<StorageGrpcService>('StorageService');
   }
 
-  async uploadImage(
+  async upload(
     filename: string,
     buffer: Buffer,
     bucket: string = 'images',
@@ -40,7 +40,7 @@ export class StorageService implements OnModuleInit {
     try {
       this.logger.log(`Uploading ${filename} to bucket ${bucket} via gRPC...`);
       const response = await lastValueFrom<{ url: string }>(
-        this.storageGrpcService.uploadImage({
+        this.storageGrpcService.upload({
           filename,
           data: buffer,
           bucket,
@@ -51,7 +51,7 @@ export class StorageService implements OnModuleInit {
       return response.url;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to upload image via gRPC: ${msg}`);
+      this.logger.error(`Failed to upload file via gRPC: ${msg}`);
       throw error;
     }
   }
