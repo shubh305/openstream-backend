@@ -34,12 +34,9 @@ import { ChannelsModule } from '../channels/channels.module';
             transport: Transport.KAFKA,
             options: {
               client: {
-                brokers: [
-                  configService.get(
-                    'KAFKA_BROKERS',
-                    'broker.octanebrew.dev:8085',
-                  ),
-                ],
+                brokers: configService
+                  .get<string>('KAFKA_BROKERS', 'broker.octanebrew.dev:8085')
+                  .split(','),
                 connectionTimeout: 10000,
                 requestTimeout: 30000,
                 sasl:
@@ -52,7 +49,10 @@ import { ChannelsModule } from '../channels/channels.module';
                     : undefined,
               },
               consumer: {
-                groupId: 'vod-pipeline-producer',
+                groupId: configService.get<string>(
+                  'KAFKA_VOD_GROUP_ID',
+                  'vod-pipeline-producer',
+                ),
               },
             },
           };

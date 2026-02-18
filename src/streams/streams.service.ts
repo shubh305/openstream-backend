@@ -135,6 +135,7 @@ export class StreamsService {
       stream = await this.streamsRepository.create({
         userId: new Types.ObjectId(userId),
         title: settings.title || 'Untitled Stream',
+        description: settings.description || '',
         category: settings.category,
         visibility: settings.visibility,
         latencyMode: settings.latencyMode,
@@ -202,10 +203,14 @@ export class StreamsService {
     const cleanKey = streamKey.replace('sk_live_', '');
     const user = await this.usersRepository.findByStreamKey(cleanKey);
     if (!user) {
+      this.logger.error(`[onPublishStart] User not found for key: ${cleanKey}`);
       return;
     }
 
     const userId = user._id.toString();
+    this.logger.log(
+      `[onPublishStart] Stream starting for user ${user.username} (${userId})`,
+    );
 
     const existingStream =
       await this.streamsRepository.findActiveByUserId(userId);
@@ -227,12 +232,16 @@ export class StreamsService {
    * Called when RTMP publish ends (from webhook)
    */
   async onPublishEnd(streamKey: string): Promise<void> {
-    const user = await this.usersRepository.findByStreamKey(
-      streamKey.replace('sk_live_', ''),
-    );
+    const cleanKey = streamKey.replace('sk_live_', '');
+    const user = await this.usersRepository.findByStreamKey(cleanKey);
     if (!user) {
+      this.logger.error(`[onPublishEnd] User not found for key: ${cleanKey}`);
       return;
     }
+
+    this.logger.log(
+      `[onPublishEnd] Stream ending for user ${user.username} (${user._id.toString()})`,
+    );
 
     await this.streamsRepository.setStatusWithStreamKey(
       user._id.toString(),
@@ -268,6 +277,7 @@ export class StreamsService {
       id: stream._id.toString(),
       userId: stream.userId.toString(),
       title: stream.title,
+      description: stream.description || '',
       category: stream.category,
       visibility: stream.visibility,
       status: stream.status,

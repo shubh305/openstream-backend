@@ -49,6 +49,9 @@ export class ChatService {
    * Get chat history for a stream
    */
   async getHistory(streamId: string, limit: number = 50) {
+    if (!Types.ObjectId.isValid(streamId)) {
+      return [];
+    }
     const stream = await this.streamsRepository.findById(streamId);
 
     const query: {

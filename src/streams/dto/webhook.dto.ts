@@ -62,6 +62,11 @@ export class UpdateStreamSettingsDto {
   @IsString()
   title?: string;
 
+  @ApiPropertyOptional({ example: 'My stream description' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
   @ApiPropertyOptional({ enum: StreamCategory })
   @IsOptional()
   @IsEnum(StreamCategory)
@@ -95,6 +100,9 @@ export class StreamResponseDto {
 
   @ApiProperty()
   title: string;
+
+  @ApiProperty()
+  description: string;
 
   @ApiProperty()
   category: string;

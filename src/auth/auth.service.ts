@@ -197,7 +197,9 @@ export class AuthService implements OnModuleInit {
   }
 
   async validateStreamKey(streamKey: string): Promise<boolean> {
-    const user = await this.usersRepository.findByStreamKey(streamKey);
+    if (!streamKey) return false;
+    const cleanKey = streamKey.replace('sk_live_', '');
+    const user = await this.usersRepository.findByStreamKey(cleanKey);
     return !!user;
   }
 

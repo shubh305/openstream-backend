@@ -76,10 +76,13 @@ export class VideoProcessingService {
         userId: user._id,
         channelId: channel._id,
         title: streamInfo?.title || `Live Replay ${new Date().toDateString()}`,
-        description: `Recorded live stream from ${new Date().toLocaleString()}`,
+        description:
+          streamInfo?.description ||
+          `Recorded live stream from ${new Date().toLocaleString()}`,
         status: VideoStatus.PROCESSING,
-        visibility: VideoVisibility.PRIVATE,
-        isLive: false,
+        visibility: streamInfo?.visibility || VideoVisibility.PRIVATE,
+        category: streamInfo?.category || 'Other',
+        isLive: true,
         encoding: {
           crf: 0,
           complexityScore: 0,

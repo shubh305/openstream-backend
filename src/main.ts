@@ -7,14 +7,23 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { json, urlencoded } from 'express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger:
+      process.env.NODE_ENV === 'production'
+        ? ['error', 'warn']
+        : ['log', 'debug', 'error', 'warn', 'verbose'],
+  });
   const configService = app.get(ConfigService);
   const prefix = configService.get<string>('API_PREFIX') || 'api';
 
   app.setGlobalPrefix(prefix);
   app.enableCors();
+
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ extended: true, limit: '10mb' }));
 
   if (process.env.NODE_ENV !== 'production') {
     app.use((req: Request, res: Response, next: NextFunction) => {
@@ -57,7 +66,7 @@ async function bootstrap() {
     transport: Transport.KAFKA,
     options: {
       client: {
-        brokers: [brokers],
+        brokers: brokers.split(','),
         connectionTimeout: 20000,
         requestTimeout: 60000,
         sasl: isSaslEnabled
@@ -69,7 +78,10 @@ async function bootstrap() {
           : undefined,
       },
       consumer: {
-        groupId: 'openstream-api-consumer',
+        groupId: configService.get<string>(
+          'KAFKA_API_CONSUMER_GROUP_ID',
+          'openstream-api-consumer',
+        ),
         maxPollInterval: 300000,
         sessionTimeout: 60000,
       },

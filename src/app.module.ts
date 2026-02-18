@@ -35,6 +35,7 @@ import * as Joi from 'joi';
       isGlobal: true,
       validationSchema: Joi.object({
         MONGO_URI: Joi.string().required(),
+        MONGO_DB_NAME: Joi.string().required(),
         JWT_SECRET: Joi.string().required(),
         RTMP_INGEST_URL: Joi.string().default('rtmp://localhost:1935/live'),
         PORT: Joi.number().default(4000),
@@ -63,6 +64,7 @@ import * as Joi from 'joi';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         uri: configService.get<string>('MONGO_URI'),
+        dbName: configService.get<string>('MONGO_DB_NAME'),
       }),
       inject: [ConfigService],
     }),

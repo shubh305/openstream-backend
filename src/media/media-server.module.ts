@@ -29,12 +29,9 @@ import { MediaController } from './media.controller';
             transport: Transport.KAFKA,
             options: {
               client: {
-                brokers: [
-                  configService.get(
-                    'KAFKA_BROKERS',
-                    'broker.octanebrew.dev:8085',
-                  ),
-                ],
+                brokers: configService
+                  .get<string>('KAFKA_BROKERS', 'broker.octanebrew.dev:8085')
+                  .split(','),
                 connectionTimeout: 10000,
                 requestTimeout: 30000,
                 sasl:
@@ -47,7 +44,10 @@ import { MediaController } from './media.controller';
                     : undefined,
               },
               consumer: {
-                groupId: 'api-producer',
+                groupId: configService.get<string>(
+                  'KAFKA_MEDIA_GROUP_ID',
+                  'api-producer',
+                ),
               },
             },
           };

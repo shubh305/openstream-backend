@@ -41,6 +41,9 @@ export class Stream {
   @Prop({ default: 'Untitled Stream' })
   title: string;
 
+  @Prop({ default: '' })
+  description: string;
+
   @Prop({ type: String, enum: StreamCategory, default: StreamCategory.OTHER })
   category: StreamCategory;
 

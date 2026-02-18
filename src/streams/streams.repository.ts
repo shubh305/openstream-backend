@@ -93,6 +93,7 @@ export class StreamsRepository {
       updateData.startedAt = new Date();
     } else if (status === StreamStatus.OFFLINE) {
       updateData.endedAt = new Date();
+      updateData.viewerCount = 0;
     }
 
     return this.streamModel
@@ -113,6 +114,7 @@ export class StreamsRepository {
       updateData.startedAt = new Date();
     } else if (status === StreamStatus.OFFLINE) {
       updateData.endedAt = new Date();
+      updateData.viewerCount = 0;
     }
 
     return this.streamModel
