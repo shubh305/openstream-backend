@@ -11,7 +11,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { AuthService, SanitizedUser } from './auth.service';
+import { AuthService } from './auth.service';
 import { AuthGuard } from '@nestjs/passport';
 import {
   LoginDto,
@@ -146,10 +146,14 @@ export class AuthController {
     description: 'New access token',
     type: AuthResponseDto,
   })
-  @UseGuards(AuthGuard('jwt'))
   @Post('refresh')
-  refreshToken(@Req() req: AuthRequest): AuthResponseDto {
-    return this.authService.login(req.user as unknown as SanitizedUser);
+  async refreshToken(
+    @Body('refresh_token') refreshToken: string,
+  ): Promise<AuthResponseDto> {
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token required');
+    }
+    return this.authService.refresh(refreshToken);
   }
 
   @ApiOperation({ summary: 'Request password reset' })

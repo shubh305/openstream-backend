@@ -22,6 +22,7 @@ import { ChatModule } from './chat/chat.module';
 import { UploadModule } from './upload/upload.module';
 import { SearchModule } from './search/search.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { VodPipelineModule } from './videos/vod-pipeline.module';
 
 import { AppController } from './app.controller';
 
@@ -38,6 +39,12 @@ import * as Joi from 'joi';
         RTMP_INGEST_URL: Joi.string().default('rtmp://localhost:1935/live'),
         PORT: Joi.number().default(4000),
         API_PREFIX: Joi.string().default('api'),
+        MAX_UPLOAD_BYTES: Joi.number().default(5368709120),
+        TUS_CHUNK_SIZE_MB: Joi.number().default(5),
+        INTELLIGENCE_SVC_URL: Joi.string().default(''),
+        SERVICE_API_KEY: Joi.string().default(''),
+        SUBTITLE_TARGET_LANGS: Joi.string().default('es,hi,fr'),
+        POSTGRES_DSN: Joi.string().default(''),
       }),
     }),
 
@@ -78,6 +85,7 @@ import * as Joi from 'joi';
     UploadModule,
     SearchModule,
     AnalyticsModule,
+    VodPipelineModule,
   ],
   controllers: [AppController],
   providers: [],

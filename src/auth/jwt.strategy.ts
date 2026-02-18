@@ -28,11 +28,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
 
-    // Return full user object but stripped of password
-    // matching SanitizedUser interface + userId for compatibility
     return {
       _id: user._id,
-      userId: user._id.toString(), // For compatibility with controllers using .userId
+      userId: user._id.toString(),
+      sub: user._id.toString(),
       username: user.username,
       email: user.email,
       avatar: user.avatar,

@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import type { Request, Response, NextFunction } from 'express';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
@@ -14,6 +15,13 @@ async function bootstrap() {
 
   app.setGlobalPrefix(prefix);
   app.enableCors();
+
+  if (process.env.NODE_ENV !== 'production') {
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      console.log(`[Request] ${req.method} ${req.url}`);
+      next();
+    });
+  }
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -41,30 +49,39 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  const isSaslEnabled = !!process.env.KAFKA_SASL_USER;
+  const isSaslEnabled = !!configService.get<string>('KAFKA_SASL_USER');
+  const brokers =
+    configService.get<string>('KAFKA_BROKERS') || 'broker.octanebrew.dev:8085';
 
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.KAFKA,
     options: {
       client: {
-        brokers: [process.env.KAFKA_BROKERS || 'broker.octanebrew.dev:8085'],
-        connectionTimeout: 10000,
-        requestTimeout: 30000,
+        brokers: [brokers],
+        connectionTimeout: 20000,
+        requestTimeout: 60000,
         sasl: isSaslEnabled
           ? {
               mechanism: 'plain',
-              username: process.env.KAFKA_SASL_USER!,
-              password: process.env.KAFKA_SASL_PASS!,
+              username: configService.get<string>('KAFKA_SASL_USER')!,
+              password: configService.get<string>('KAFKA_SASL_PASS')!,
             }
           : undefined,
       },
       consumer: {
-        groupId: 'api-consumer',
+        groupId: 'openstream-api-consumer',
+        maxPollInterval: 300000,
+        sessionTimeout: 60000,
+      },
+      subscribe: {
+        fromBeginning: true,
       },
     },
   });
 
   await app.startAllMicroservices();
   await app.listen(process.env.PORT ?? 4000, '0.0.0.0');
+
+  console.log(`[VOD] Backend listening on port ${process.env.PORT ?? 4000}`);
 }
 void bootstrap();

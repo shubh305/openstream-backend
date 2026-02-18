@@ -218,6 +218,12 @@ export class StreamsController {
     return result;
   }
 
+  @Post('on_publish_done')
+  async onPublishDone(@Body() body: AuthWebhookDto) {
+    await this.streamsService.onPublishEnd(body.name);
+    return { status: 'ok' };
+  }
+
   private async validateRequest(body: AuthWebhookDto) {
     const streamKey = body.name.replace('sk_live_', '');
     const isValid = await this.authService.validateStreamKey(streamKey);

@@ -60,6 +60,9 @@ export class AuthResponseDto {
   @ApiProperty({ description: 'JWT Access Token' })
   access_token!: string;
 
+  @ApiProperty({ description: 'JWT Refresh Token' })
+  refresh_token!: string;
+
   @ApiProperty({ description: 'Stream Key for RTMP' })
   streamKey!: string;
 }

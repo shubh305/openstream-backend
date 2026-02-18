@@ -7,6 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import { UsersRepository } from '../users/users.repository';
 import { ChannelsService } from '../channels/channels.service';
@@ -24,6 +25,13 @@ export interface SanitizedUser {
   createdAt: Date;
 }
 
+interface JwtPayload {
+  username: string;
+  sub: string;
+  iat?: number;
+  exp?: number;
+}
+
 @Injectable()
 export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name);
@@ -33,6 +41,7 @@ export class AuthService implements OnModuleInit {
     private readonly usersRepository: UsersRepository,
     @Inject(forwardRef(() => ChannelsService))
     private readonly channelsService: ChannelsService,
+    private readonly configService: ConfigService,
   ) {}
 
   async onModuleInit() {
@@ -88,19 +97,53 @@ export class AuthService implements OnModuleInit {
       user = await this.usersRepository.findByEmail(identifier);
     }
     if (user && (await bcrypt.compare(pass, user.password))) {
-      const userObj = user.toObject() as { [key: string]: any };
+      const userObj = user.toObject() as Record<string, unknown>;
       delete userObj.password;
-      return userObj as SanitizedUser;
+      return userObj as unknown as SanitizedUser;
     }
     return null;
   }
 
   login(user: SanitizedUser): AuthResponseDto {
     const payload = { username: user.username, sub: user._id.toString() };
+    const refreshExpiry =
+      this.configService.get<string>('JWT_REFRESH_EXPIRATION') || '7d';
+
     return {
       access_token: this.jwtService.sign(payload),
+      refresh_token: this.jwtService.sign(payload, {
+        expiresIn: refreshExpiry as unknown as number,
+      }),
       streamKey: user.streamKey,
     };
+  }
+
+  async refresh(refreshToken: string): Promise<AuthResponseDto> {
+    try {
+      const payload: JwtPayload = this.jwtService.verify(refreshToken);
+      const userId = payload.sub;
+      const user = await this.usersRepository.findOne({ _id: userId });
+      if (!user) {
+        throw new UnauthorizedException('User not found');
+      }
+
+      const sanitizedUser: SanitizedUser = {
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        avatar: user.avatar,
+        streamKey: user.streamKey,
+        createdAt: user.createdAt,
+      };
+
+      return this.login(sanitizedUser);
+    } catch (e: unknown) {
+      this.logger.error(
+        'Invalid refresh token',
+        e instanceof Error ? e.stack : String(e),
+      );
+      throw new UnauthorizedException('Invalid refresh token');
+    }
   }
 
   async signup(

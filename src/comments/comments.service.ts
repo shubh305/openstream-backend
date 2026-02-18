@@ -29,6 +29,15 @@ export class CommentsService {
   ) {}
 
   /**
+   * Get total comments count for a video
+   */
+  async countByVideoId(videoId: string): Promise<number> {
+    return this.commentModel
+      .countDocuments({ videoId: new Types.ObjectId(videoId) })
+      .exec();
+  }
+
+  /**
    * Get comments for a video
    */
   async getVideoComments(

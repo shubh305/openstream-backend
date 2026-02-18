@@ -19,7 +19,11 @@ import { ChannelsModule } from '../channels/channels.module';
       useFactory: (configService: ConfigService) => ({
         secret:
           configService.get<string>('JWT_SECRET') || 'hardcoded_secret_for_dev',
-        signOptions: { expiresIn: '60m' },
+        signOptions: {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          expiresIn: (configService.get<string>('JWT_EXPIRATION') ||
+            '15m') as any,
+        },
       }),
       inject: [ConfigService],
     }),
