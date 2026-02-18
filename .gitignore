@@ -146,6 +146,7 @@ e2e_test.js
 test/
 client-test/
 prd*
+/migrations
 
 # Media files
 /media/

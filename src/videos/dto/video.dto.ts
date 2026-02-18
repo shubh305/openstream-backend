@@ -7,8 +7,10 @@ import {
   IsNumber,
   Min,
   Max,
+  IsDate,
+  IsBoolean,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import {
   VideoVisibility,
   VideoCategory,
@@ -92,6 +94,11 @@ export class UpdateVideoDto {
   @IsOptional()
   @IsEnum(VideoStatus)
   status?: VideoStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDate()
+  publishedAt?: Date;
 }
 
 export class VideoQueryDto {
@@ -137,6 +144,15 @@ export class VideoQueryDto {
   @IsOptional()
   @IsEnum(VideoStatus)
   status?: VideoStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }: { value: any }) => {
+    if (value === undefined || value === null) return undefined;
+    return value === 'true' || value === true;
+  })
+  isLive?: boolean;
 }
 
 // Response DTOs
@@ -175,6 +191,15 @@ export class VideoListItemDto {
 
   @ApiProperty()
   isLive: boolean;
+
+  @ApiProperty({ enum: VideoVisibility })
+  visibility: VideoVisibility;
+
+  @ApiProperty()
+  likes: number;
+
+  @ApiProperty()
+  commentsCount: number;
 
   @ApiProperty({ type: CreatorDto })
   creator: CreatorDto;
@@ -244,6 +269,9 @@ export class VideoDetailDto {
   @ApiProperty()
   dislikes: number;
 
+  @ApiProperty()
+  commentsCount: number;
+
   @ApiProperty({ example: '2 days ago' })
   uploadedAt: string;
 
@@ -254,6 +282,9 @@ export class VideoDetailDto {
   visibility: VideoVisibility;
 
   @ApiProperty()
+  isLive: boolean;
+
+  @ApiProperty()
   category: string;
 
   @ApiProperty({ type: CreatorDto })
@@ -261,4 +292,7 @@ export class VideoDetailDto {
 
   @ApiProperty({ type: UserInteractionDto })
   userInteraction: UserInteractionDto;
+
+  @ApiPropertyOptional({ type: [String], example: ['480p', '720p', '1080p'] })
+  resolutions?: string[];
 }

@@ -11,8 +11,12 @@ export enum VideoVisibility {
 
 export enum VideoStatus {
   DRAFT = 'draft',
+  UPLOADING = 'uploading',
+  UPLOAD_COMPLETE = 'upload_complete',
   PROCESSING = 'processing',
+  PLAYABLE = 'playable',
   PUBLISHED = 'published',
+  COMPLETE = 'complete',
   FAILED = 'failed',
 }
 
@@ -85,6 +89,40 @@ export class Video {
 
   @Prop({ type: Date, default: null })
   publishedAt: Date | null;
+
+  @Prop({ type: Date, default: null })
+  playableAt: Date | null;
+
+  @Prop({ type: Date, default: null })
+  completeAt: Date | null;
+
+  @Prop({
+    type: {
+      crf: { type: Number, default: 0 },
+      complexityScore: { type: Number, default: 0 },
+      resolutions: { type: [String], default: [] },
+    },
+    _id: false,
+    default: {},
+    required: true,
+  })
+  encoding: {
+    crf: number;
+    complexityScore: number;
+    resolutions: string[];
+  };
+
+  @Prop({ type: Map, of: String, default: {} })
+  subtitles: Map<string, string>;
+
+  @Prop({ default: false })
+  accessibilityCompliant: boolean;
+
+  @Prop({ default: false })
+  isLive: boolean;
+
+  @Prop({ type: String, default: null })
+  hlsManifest: string | null;
 
   createdAt: Date;
   updatedAt: Date;

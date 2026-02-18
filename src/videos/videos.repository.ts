@@ -16,6 +16,7 @@ interface VideoFilter {
   visibility?: VideoVisibility | { $in: VideoVisibility[] };
   status?: VideoStatus | { $in: VideoStatus[] };
   category?: VideoCategory;
+  isLive?: any;
 }
 
 export interface VideoQueryOptions {
@@ -25,8 +26,9 @@ export interface VideoQueryOptions {
   category?: string;
   channelId?: string;
   userId?: string;
-  visibility?: VideoVisibility;
-  status?: VideoStatus;
+  visibility?: VideoVisibility | { $in: VideoVisibility[] };
+  status?: VideoStatus | { $in: VideoStatus[] };
+  isLive?: boolean;
 }
 
 @Injectable()
@@ -62,7 +64,13 @@ export class VideosRepository {
     }
 
     if (!options.status) {
-      filter.status = VideoStatus.PUBLISHED;
+      filter.status = {
+        $in: [
+          VideoStatus.PUBLISHED,
+          VideoStatus.PLAYABLE,
+          VideoStatus.COMPLETE,
+        ],
+      };
     } else {
       filter.status = options.status;
     }
@@ -77,6 +85,14 @@ export class VideosRepository {
 
     if (options.userId) {
       filter.userId = new Types.ObjectId(options.userId);
+    }
+
+    if (options.isLive !== undefined) {
+      if (options.isLive) {
+        filter.isLive = true;
+      } else {
+        filter.isLive = { $ne: true };
+      }
     }
 
     // Sort options
@@ -117,13 +133,24 @@ export class VideosRepository {
       .exec();
   }
 
-  async findTrending(limit: number = 12): Promise<VideoDocument[]> {
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  async findTrending(limit: number = 20): Promise<VideoDocument[]> {
+    const searchWindow = new Date();
+    searchWindow.setDate(searchWindow.getDate() - 7);
+
     return this.videoModel
       .find({
         visibility: VideoVisibility.PUBLIC,
-        status: VideoStatus.PUBLISHED,
-        publishedAt: { $gte: oneDayAgo },
+        status: {
+          $in: [
+            VideoStatus.PUBLISHED,
+            VideoStatus.PLAYABLE,
+            VideoStatus.COMPLETE,
+          ],
+        },
+        $or: [
+          { publishedAt: { $gte: searchWindow } },
+          { createdAt: { $gte: searchWindow } },
+        ],
       })
       .sort({ views: -1 })
       .limit(limit)
@@ -140,7 +167,13 @@ export class VideosRepository {
         _id: { $ne: new Types.ObjectId(videoId) },
         category,
         visibility: VideoVisibility.PUBLIC,
-        status: VideoStatus.PUBLISHED,
+        status: {
+          $in: [
+            VideoStatus.PUBLISHED,
+            VideoStatus.PLAYABLE,
+            VideoStatus.COMPLETE,
+          ],
+        },
       })
       .sort({ views: -1 })
       .limit(limit)

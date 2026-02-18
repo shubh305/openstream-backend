@@ -9,6 +9,7 @@ import { VideoLike, VideoLikeSchema } from './schemas/video-like.schema';
 import { ChannelsModule } from '../channels/channels.module';
 import { UsersModule } from '../users/users.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import { CommentsModule } from '../comments/comments.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { AnalyticsModule } from '../analytics/analytics.module';
     forwardRef(() => ChannelsModule),
     forwardRef(() => UsersModule),
     forwardRef(() => AnalyticsModule),
+    CommentsModule,
   ],
   controllers: [VideosController],
   providers: [VideosService, VideosRepository],

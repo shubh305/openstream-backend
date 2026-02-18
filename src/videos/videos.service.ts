@@ -8,6 +8,7 @@ import { VideosRepository, VideoQueryOptions } from './videos.repository';
 import { ChannelsRepository } from '../channels/channels.repository';
 import { UsersRepository } from '../users/users.repository';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { CommentsService } from '../comments/comments.service';
 import {
   CreateVideoDto,
   UpdateVideoDto,
@@ -35,6 +36,7 @@ export class VideosService {
     private readonly channelsRepository: ChannelsRepository,
     private readonly usersRepository: UsersRepository,
     private readonly analyticsService: AnalyticsService,
+    private readonly commentsService: CommentsService,
   ) {}
 
   /**
@@ -132,11 +134,30 @@ export class VideosService {
       channelId: queryDto.channelId,
       visibility: queryDto.visibility,
       status: queryDto.status,
+      isLive: queryDto.isLive,
     };
 
     // Only show private videos if owner is requesting
     if (options.visibility === VideoVisibility.PRIVATE && !userId) {
       options.visibility = VideoVisibility.PUBLIC;
+    }
+
+    if (userId && options.channelId) {
+      const channel = await this.channelsRepository.findById(options.channelId);
+
+      if (channel && channel.userId.toString() === userId) {
+        if (!options.visibility) {
+          options.visibility = {
+            $in: Object.values(VideoVisibility),
+          };
+        }
+
+        if (!options.status) {
+          options.status = {
+            $in: Object.values(VideoStatus),
+          };
+        }
+      }
     }
 
     const { videos, total } = await this.videosRepository.findMany(options);
@@ -209,11 +230,19 @@ export class VideosService {
       throw new NotFoundException('Video not found');
     }
 
-    const recommendations = await this.videosRepository.findRecommendations(
+    let recommendations = await this.videosRepository.findRecommendations(
       videoId,
       video.category,
       limit,
     );
+
+    // Fallback: If no related videos in same category, show trending videos
+    if (recommendations.length === 0) {
+      recommendations = await this.videosRepository.findTrending(limit);
+      recommendations = recommendations.filter(
+        (v) => v._id.toString() !== videoId,
+      );
+    }
 
     return Promise.all(recommendations.map((v) => this.formatVideoListItem(v)));
   }
@@ -235,7 +264,12 @@ export class VideosService {
       throw new ForbiddenException('You cannot update this video');
     }
 
-    const updatedVideo = await this.videosRepository.update(id, updateDto);
+    const updateData = { ...updateDto };
+    if (updateDto.status === VideoStatus.PUBLISHED && !video.publishedAt) {
+      updateData.publishedAt = new Date();
+    }
+
+    const updatedVideo = await this.videosRepository.update(id, updateData);
 
     const channel = await this.channelsRepository.findById(
       video.channelId.toString(),
@@ -384,18 +418,22 @@ export class VideosService {
   private async formatVideoListItem(
     video: VideoDocument,
   ): Promise<VideoListItemDto> {
-    const user = await this.usersRepository.findOne({
-      _id: video.userId.toString(),
-    });
+    const [user, commentsCount] = await Promise.all([
+      this.usersRepository.findOne({ _id: video.userId.toString() }),
+      this.commentsService.countByVideoId(video._id.toString()),
+    ]);
 
     return {
       id: video._id.toString(),
       title: video.title,
-      thumbnailUrl: video.thumbnailUrl || '',
+      thumbnailUrl: video.thumbnailUrl || video.posterUrl || '',
       duration: this.formatDuration(video.duration),
       views: video.views,
+      likes: video.likes,
+      commentsCount,
       uploadedAt: this.formatRelativeTime(video.publishedAt || video.createdAt),
-      isLive: false,
+      isLive: video.isLive,
+      visibility: video.visibility,
       creator: {
         username: (user as UserDoc)?.username || 'Unknown',
         avatarUrl: (user as UserDoc)?.avatar || '',
@@ -403,15 +441,17 @@ export class VideosService {
     };
   }
 
-  private formatVideoDetail(
+  private async formatVideoDetail(
     video: VideoDocument,
     user: UserDoc | null,
     channel: ChannelDocument | null,
     currentUserId?: string,
     liked: boolean = false,
     disliked: boolean = false,
-  ): VideoDetailDto {
-    // currentUserId can be used for owner-specific features in the future
+  ): Promise<VideoDetailDto> {
+    const commentsCount = await this.commentsService.countByVideoId(
+      video._id.toString(),
+    );
 
     return {
       id: video._id.toString(),
@@ -419,15 +459,17 @@ export class VideosService {
       description: video.description,
       thumbnailUrl: video.thumbnailUrl || '',
       posterUrl: video.posterUrl || video.thumbnailUrl || '',
-      videoUrl: video.videoUrl || '',
+      videoUrl: video.hlsManifest || video.videoUrl || '',
       duration: this.formatDuration(video.duration),
       views: video.views,
       likes: video.likes,
       dislikes: video.dislikes,
+      commentsCount,
       uploadedAt: this.formatRelativeTime(video.publishedAt || video.createdAt),
       publishedAt: video.publishedAt?.toISOString() || '',
       visibility: video.visibility,
       category: video.category,
+      isLive: video.isLive,
       creator: {
         username: user?.username || 'Unknown',
         avatarUrl: user?.avatar || '',
@@ -439,6 +481,7 @@ export class VideosService {
         disliked,
         subscribed: false, // TODO: Check subscription status
       },
+      resolutions: video.encoding?.resolutions || [],
     };
   }
 

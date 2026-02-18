@@ -13,6 +13,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import {
   ApiTags,
   ApiOperation,
@@ -42,6 +43,7 @@ export class VideosController {
     description: 'List of videos',
     type: VideoListResponseDto,
   })
+  @UseGuards(OptionalJwtAuthGuard)
   @Get()
   async listVideos(
     @Query() query: VideoQueryDto,
@@ -93,6 +95,7 @@ export class VideosController {
     type: VideoDetailDto,
   })
   @ApiResponse({ status: 404, description: 'Video not found' })
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(':id')
   async getVideoById(
     @Param('id') id: string,
