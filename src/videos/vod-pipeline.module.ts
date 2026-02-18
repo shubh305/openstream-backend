@@ -67,6 +67,6 @@ import { ChannelsModule } from '../channels/channels.module';
 })
 export class VodPipelineModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(TusMiddleware).forRoutes('v1/upload/tus');
+    consumer.apply(TusMiddleware).forRoutes('vod-upload/tus');
   }
 }

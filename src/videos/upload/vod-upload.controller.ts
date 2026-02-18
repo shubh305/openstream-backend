@@ -37,7 +37,7 @@ interface JwtPayload {
 }
 
 @ApiTags('VOD Upload')
-@Controller('v1/upload')
+@Controller('vod-upload')
 export class VodUploadController {
   constructor(
     private readonly sessionService: TusSessionService,
@@ -99,7 +99,7 @@ export class VodUploadController {
     return {
       sessionId: session.sessionId,
       videoId: session.videoId,
-      uploadUrl: `/api/v1/upload/tus/${session.sessionId}`,
+      uploadUrl: `/api/vod-upload/tus/${session.sessionId}`,
     };
   }
 

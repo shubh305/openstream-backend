@@ -58,7 +58,7 @@ export class TusMiddleware implements NestMiddleware, OnModuleInit {
     });
 
     this.tusServer = new Server({
-      path: '/api/v1/upload/tus',
+      path: '/api/vod-upload/tus',
       datastore: s3Store,
       respectForwardedHeaders: true,
       maxSize: this.sessionService.getMaxUploadBytes(),
