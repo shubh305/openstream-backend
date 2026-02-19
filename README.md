@@ -1,110 +1,66 @@
-# OpenStream // BACKEND
+# OpenStream Backend — High-Fidelity Streaming Engine
 
-**Status:** `OPERATIONAL` // **Tier:** `APPLICATION_SPOKE` // **Platform:** `OCTANEBREW_HUB`
+**OpenStream** is a high-performance streaming control plane engineered for real-time media orchestration. Operating as a specialized **Spoke** within the OctaneBrew platform, it manages the full lifecycle of video content—from high-velocity RTMP ingestion to adaptive VOD archival. Built for autonomy and resilience, OpenStream features **Sovereign Authentication**, a split-lane processing DAG, and a persistent WebSocket mesh, ensuring zero-latency engagement independent of the central hub.
 
-**OpenStream Backend** is a high-fidelity live streaming control plane built with NestJS. It operates as a critical "spoke" in the OctaneBrew ecosystem, managing the orchestration of live video ingestion, real-time engagement, and asynchronous media archival.
+## Quick Start
 
----
+1. **Setup Development Environment**:
+   ```bash
+   cp .env.example .env
+   npm install
+   ```
+2. **Launch Services**:
+   - Master API: `npm run start:dev`
+   - Docker: `docker-compose up -d`
 
-## System Architecture
+3. **Prerequisites**:
+   - **Node.js**: v22 or later
+   - **MongoDB**: A running instance (local or Atlas)
+   - **Kafka**: Broker access (for VOD orchestration)
+   - **FFmpeg Worker**: Shared service for transcoding
 
-The service operates in a **Reactive Orchestration Mode**, coordinating between high-speed ingestion and shared platform intelligence.
+4. **API Documentation**: Available at `http://localhost:3001/api/docs` (Swagger UI).
 
-1.  **Ingestion Authorization**: 
-    *   Mediates between the `nginx-gateway` and `rtmp-ingest` nodes.
-    *   Handles `on_publish` RTMP webhooks to validate enterprise-tier stream keys.
-2.  **Real-Time Engagement**:
-    *   Powers the persistent Chat Engine via **WebSockets (Socket.IO)**.
-3.  **Autonomous Archival**:
-    *   When recording concludes, it emits a `video.transcode` event to the shared **FFmpeg Worker** mesh.
-    *   Polls for thumbnail generation and VOD state resolution via shared MinIO buckets.
+## Showcase-Level Architecture
+OpenStream is designed for high-throughput media operations:
+- **Sovereign Spoke**: Independent JWT validation and autonomous media authorization.
+- **Split-Lane DAG**: Parallel processing pipelines for "Fast Lane" (Instant Play) and "Slow Lane" (Quality) transcoding.
+- **Event-Driven Core**: Kafka-based orchestration decoupling ingest from processing.
 
-### A. Unified Ingestion & Processing Pipeline
-```mermaid
-graph TD
-    subgraph "Phase 1: Ingestion/Live"
-        U[Client Upload] -->|presigned_url| S3[MinIO S3]
-        S[Live Stream] -->|RTMP| RTMP[Nginx-RTMP]
-    end
+## Technical Documentation Suite
 
-    subgraph "Phase 2: Post ingestion"
-        U -->|POST /complete| OSB[OpenStream Backend]
-        RTMP -->|on_record_done| OSB
-        OSB -->|Metadata| Mongo[(MongoDB)]
-    end
+The complete authoritative documentation is available in the `docs` directory:
 
-    subgraph "Phase 3: Real-Time Sync"
-        OSB <-->|ws/pub-sub| Chat
-    end
-```
-
----
-
-## 📂 Directory Structure
-
-```text
-.
-├── src/
-│   ├── auth/          # JWT & Platform Authentication
-│   ├── chat/          # WebSocket
-│   ├── stream/        # RTMP Webhooks & Authorization
-│   ├── vod/           # Archival & Media Management
-│   ├── main.ts        # Entry point & Swagger Init
-│   └── app.module.ts  # Central Dependency Hub
-├── test/              # E2E & Unit Test Suites
-├── docker-compose.yml # Local Dev Infrastructure
-└── package.json       # Dependencies & Scripts
-```
+| Document | Description |
+| :--- | :--- |
+| [**Architecture**](./docs/architecture.md) | Hub-Spoke design, Sovereign Auth, and Unified Media Flow. |
+| [**Backend Deep Dive**](./docs/backend.md) | Ingest flows, TUS integration, and design patterns. |
+| [**Operations**](./docs/operations.md) | Containerization, scaling lanes, and environment reference. |
+| [**Core Flows**](./docs/flows.md) | Visual sequence diagrams for Ingest, Upload, and Chat. |
 
 ---
 
-## Tech Stack
-
-*   **Runtime**: Node.js v22 (NestJS Framework)
-*   **Database**: MongoDB (Mongoose) for low-latency session and VOD metadata.
-*   **Messaging**: Kafka (via `@nestjs/microservices`) for distributed event sync.
-*   **Real-time**: Socket.IO for duplex communication.
-*   **Infrastructure**: Docker, Nginx (Reverse Proxy), MinIO (via Shared Hub).
+## Primary Capabilities
+- **Smart Upload Pipeline**: Resumable TUS uploads with magic-byte validation and split-lane processing.
+- **Live-to-VOD**: Automated recording and transcoding of RTMP streams upon completion.
+- **Real-Time Mesh**: High-frequency WebSocket engine for Chat rooms and Pipeline status.
+- **Adaptive Bitrate**: Complexity-aware encoding driven by I-Frame analysis.
 
 ---
 
-## API & Documentation
-
-*   **REST API**: Exposed at `https://openstream.octanebrew.dev/api/`
-*   **Swagger Docs**: Interactive documentation is available at **[https://openstream.octanebrew.dev/api/docs](https://openstream.octanebrew.dev/api/docs)** (Production) or `/api/docs` (Local).
-
----
-
-## Resilience & Reliability
-
-*   **Distributed Tracing**: Support for **OpenTelemetry** to trace requests from the gateway down to the data layer.
-
----
-
-## Deployment & CI/CD
-
-This repository utilizes the **Standardized OctaneBrew SSH-Deploy Pipeline**.
-
-*   **Workflow**: `.github/workflows/deploy.yml`
-*   **Trigger**: Merges to `main`.
-*   **Action**: Automates Docker builds and container updates on the remote enterprise core via SSH.
-
-### Local Development
+## Testing & Quality
 ```bash
-# Install dependencies
-npm install
+# Unit Tests
+npm test
 
-# Build the application
-npm run build
+# E2E Tests
+npm run test:e2e
 
-# Start in development mode
-npm run start:dev
+# Linting
+npm run lint
 ```
 
----
+## API Documentation
 
-## Security
-
-*   **JWT Authorization**: All client-facing APIs require a valid platform-issued bearer token.
-*   **Service Authentication**: Internal communication with the Hub is protected via the platform-wide `SERVICE_API_KEY`.
-*   **Noir-Shield**: Protected by the global `nginx-gateway` which filters for Cloudflare IP ranges and enforces H2 protocols.
+Once the app is running, visit:
+- **Swagger UI**: `http://localhost:4000/api/docs`
