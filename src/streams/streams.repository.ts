@@ -29,6 +29,7 @@ export class StreamsRepository {
   async findByUserId(userId: string): Promise<StreamDocument | null> {
     return this.streamModel
       .findOne({ userId: new Types.ObjectId(userId) })
+      .sort({ createdAt: -1 })
       .exec();
   }
 
@@ -38,6 +39,7 @@ export class StreamsRepository {
         userId: new Types.ObjectId(userId),
         status: { $in: [StreamStatus.LIVE, StreamStatus.STARTING] },
       })
+      .sort({ createdAt: -1 })
       .exec();
   }
 
@@ -70,16 +72,14 @@ export class StreamsRepository {
       .findByIdAndUpdate(id, updateData, { new: true })
       .exec();
   }
-
   async updateByUserId(
     userId: string,
     updateData: Partial<Stream>,
   ): Promise<StreamDocument | null> {
+    const latest = await this.findByUserId(userId);
+    if (!latest) return null;
     return this.streamModel
-      .findOneAndUpdate({ userId: new Types.ObjectId(userId) }, updateData, {
-        new: true,
-        upsert: true,
-      })
+      .findByIdAndUpdate(latest._id, updateData, { new: true })
       .exec();
   }
 
@@ -97,9 +97,17 @@ export class StreamsRepository {
     }
 
     return this.streamModel
-      .findOneAndUpdate({ userId: new Types.ObjectId(userId) }, updateData, {
-        new: true,
-      })
+      .findOneAndUpdate(
+        {
+          userId: new Types.ObjectId(userId),
+          status: { $ne: StreamStatus.OFFLINE },
+        },
+        updateData,
+        {
+          new: true,
+          sort: { createdAt: -1 },
+        },
+      )
       .exec();
   }
 
@@ -118,10 +126,17 @@ export class StreamsRepository {
     }
 
     return this.streamModel
-      .findOneAndUpdate({ userId: new Types.ObjectId(userId) }, updateData, {
-        new: true,
-        upsert: true,
-      })
+      .findOneAndUpdate(
+        {
+          userId: new Types.ObjectId(userId),
+          status: { $ne: StreamStatus.OFFLINE },
+        },
+        updateData,
+        {
+          new: true,
+          sort: { createdAt: -1 },
+        },
+      )
       .exec();
   }
 

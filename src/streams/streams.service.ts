@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Types } from 'mongoose';
 import { StreamsRepository } from './streams.repository';
@@ -128,21 +123,20 @@ export class StreamsService {
     userId: string,
     settings: UpdateStreamSettingsDto,
   ): Promise<StreamResponseDto> {
-    let stream = await this.streamsRepository.findByUserId(userId);
+    let stream = await this.streamsRepository.findActiveByUserId(userId);
 
-    if (!stream) {
-      // Create default stream settings
+    if (stream) {
+      stream = await this.streamsRepository.update(
+        stream._id.toString(),
+        settings,
+      );
+    } else {
       stream = await this.streamsRepository.create({
         userId: new Types.ObjectId(userId),
-        title: settings.title || 'Untitled Stream',
-        description: settings.description || '',
-        category: settings.category,
-        visibility: settings.visibility,
-        latencyMode: settings.latencyMode,
-        status: StreamStatus.OFFLINE,
+        ...settings,
+        status: StreamStatus.STARTING,
+        startedAt: new Date(),
       });
-    } else {
-      stream = await this.streamsRepository.updateByUserId(userId, settings);
     }
 
     return this.formatStreamResponse(stream!);
@@ -152,52 +146,64 @@ export class StreamsService {
    * Start a live stream session
    */
   async goLive(userId: string): Promise<StreamResponseDto> {
-    const activeStream =
-      await this.streamsRepository.findActiveByUserId(userId);
-    if (activeStream) {
-      throw new ConflictException('You already have an active stream');
-    }
-
-    let stream = await this.streamsRepository.findByUserId(userId);
+    let stream = await this.streamsRepository.findActiveByUserId(userId);
 
     if (!stream) {
-      // Create new stream
       stream = await this.streamsRepository.create({
         userId: new Types.ObjectId(userId),
+        title: '',
+        description: '',
         status: StreamStatus.STARTING,
         startedAt: new Date(),
       });
-    } else {
-      stream = await this.streamsRepository.setStatus(
-        userId,
-        StreamStatus.STARTING,
+      this.logger.log(
+        `[goLive] Created new session record: ${stream._id.toString()}`,
       );
+    } else {
+      stream.status = StreamStatus.STARTING;
+      stream.startedAt = new Date();
+      stream = await stream.save();
     }
 
-    return this.formatStreamResponse(stream!);
+    return this.formatStreamResponse(stream);
   }
 
   /**
    * End current stream
    */
   async endStream(userId: string): Promise<StreamResponseDto> {
+    this.logger.log(`[endStream] Requesting termination for user ${userId}`);
     const stream = await this.streamsRepository.findActiveByUserId(userId);
     if (!stream) {
+      this.logger.warn(
+        `[endStream] No active stream session found for ${userId}`,
+      );
       throw new NotFoundException('No active stream found');
     }
 
+    this.logger.log(
+      `[endStream] Ending session record: ${stream._id.toString()}`,
+    );
     const updatedStream = await this.streamsRepository.setStatus(
       userId,
       StreamStatus.OFFLINE,
     );
 
-    return this.formatStreamResponse(updatedStream!);
+    if (!updatedStream) {
+      throw new NotFoundException(
+        'Failed to end stream: no active session found',
+      );
+    }
+
+    this.logger.log(
+      `[endStream] Session ${updatedStream._id.toString()} is now OFFLINE`,
+    );
+    return this.formatStreamResponse(updatedStream);
   }
 
   /**
    * Called when RTMP publish starts (from webhook)
    * Implements stream takeover: if user already has an active stream,
-   * end it first before starting the new one.
    */
   async onPublishStart(streamKey: string): Promise<void> {
     const cleanKey = streamKey.replace('sk_live_', '');
@@ -214,18 +220,39 @@ export class StreamsService {
 
     const existingStream =
       await this.streamsRepository.findActiveByUserId(userId);
-    if (existingStream) {
-      await this.streamsRepository.setStatus(userId, StreamStatus.OFFLINE);
-      this.logger.log(
-        `[StreamTakeover] Ended existing stream for user ${user.username} before starting new one`,
-      );
-    }
 
-    await this.streamsRepository.setStatusWithStreamKey(
-      userId,
-      StreamStatus.LIVE,
-      cleanKey,
-    );
+    if (existingStream) {
+      if (existingStream.status === StreamStatus.LIVE) {
+        await this.streamsRepository.setStatus(userId, StreamStatus.OFFLINE);
+        this.logger.log(`[StreamTakeover] Ended previous LIVE session`);
+
+        const latest = await this.streamsRepository.findByUserId(userId);
+        await this.streamsRepository.create({
+          userId: new Types.ObjectId(userId),
+          title: latest?.title,
+          category: latest?.category,
+          status: StreamStatus.LIVE,
+          startedAt: new Date(),
+          streamKey: cleanKey,
+        });
+      } else {
+        await this.streamsRepository.setStatusWithStreamKey(
+          userId,
+          StreamStatus.LIVE,
+          cleanKey,
+        );
+      }
+    } else {
+      const latest = await this.streamsRepository.findByUserId(userId);
+      await this.streamsRepository.create({
+        userId: new Types.ObjectId(userId),
+        title: latest?.title || 'Untitled Stream',
+        category: latest?.category,
+        status: StreamStatus.LIVE,
+        startedAt: new Date(),
+        streamKey: cleanKey,
+      });
+    }
   }
 
   /**

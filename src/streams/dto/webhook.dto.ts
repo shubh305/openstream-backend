@@ -81,6 +81,11 @@ export class UpdateStreamSettingsDto {
   @IsOptional()
   @IsEnum(LatencyMode)
   latencyMode?: LatencyMode;
+
+  @ApiPropertyOptional({ example: 'https://example.com/thumbnail.jpg' })
+  @IsOptional()
+  @IsString()
+  thumbnailUrl?: string;
 }
 
 export class CreatorDto {

@@ -486,14 +486,24 @@ export class VideosService {
   }
 
   private formatDuration(seconds: number): string {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
+    const totalMinutes = Math.round(seconds / 60);
 
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    if (totalMinutes === 0 && seconds > 0) {
+      return '1 min';
     }
-    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+
+    if (totalMinutes < 60) {
+      return `${totalMinutes} min`;
+    }
+
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+
+    if (m === 0) {
+      return `${h} h`;
+    }
+
+    return `${h} h ${m} min`;
   }
 
   private formatRelativeTime(date: Date): string {
