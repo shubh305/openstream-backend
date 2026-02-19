@@ -96,11 +96,11 @@ export class VideosRepository {
     }
 
     // Sort options
-    let sortOption: Record<string, 1 | -1> = { publishedAt: -1 };
+    let sortOption: Record<string, 1 | -1> = { publishedAt: -1, createdAt: -1 };
     if (options.sort === 'popular') {
-      sortOption = { views: -1 };
+      sortOption = { views: -1, createdAt: -1 };
     } else if (options.sort === 'oldest') {
-      sortOption = { publishedAt: 1 };
+      sortOption = { publishedAt: 1, createdAt: 1 };
     }
 
     const skip = (options.page - 1) * options.limit;

@@ -49,7 +49,7 @@ export class StreamsRepository {
         status: StreamStatus.LIVE,
         visibility: StreamVisibility.PUBLIC,
       })
-      .sort({ viewerCount: -1 })
+      .sort({ startedAt: -1, viewerCount: -1 })
       .limit(limit)
       .exec();
   }
@@ -60,7 +60,7 @@ export class StreamsRepository {
         status: StreamStatus.LIVE,
         visibility: StreamVisibility.PUBLIC,
       })
-      .sort({ viewerCount: -1 })
+      .sort({ startedAt: -1, viewerCount: -1 })
       .exec();
   }
 
