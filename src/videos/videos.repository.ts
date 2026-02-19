@@ -271,7 +271,13 @@ export class VideosRepository {
           { description: { $regex: query, $options: 'i' } },
         ],
         visibility: VideoVisibility.PUBLIC,
-        status: VideoStatus.PUBLISHED,
+        status: {
+          $in: [
+            VideoStatus.PUBLISHED,
+            VideoStatus.PLAYABLE,
+            VideoStatus.COMPLETE,
+          ],
+        },
       })
       .limit(limit)
       .exec();

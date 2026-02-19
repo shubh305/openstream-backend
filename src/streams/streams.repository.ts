@@ -14,6 +14,18 @@ export class StreamsRepository {
     @InjectModel(Stream.name) private streamModel: Model<StreamDocument>,
   ) {}
 
+  async search(query: string, limit: number = 10): Promise<StreamDocument[]> {
+    return this.streamModel
+      .find({
+        status: StreamStatus.LIVE,
+        title: { $regex: query, $options: 'i' },
+        visibility: StreamVisibility.PUBLIC,
+      })
+      .sort({ viewerCount: -1 })
+      .limit(limit)
+      .exec();
+  }
+
   async create(streamData: Partial<Stream>): Promise<StreamDocument> {
     const stream = new this.streamModel(streamData);
     return stream.save();

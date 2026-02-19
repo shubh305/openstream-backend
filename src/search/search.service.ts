@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { VideosRepository } from '../videos/videos.repository';
 import { ChannelsRepository } from '../channels/channels.repository';
 import { UsersRepository } from '../users/users.repository';
+import { StreamsRepository } from '../streams/streams.repository';
 
 @Injectable()
 export class SearchService {
@@ -9,23 +10,25 @@ export class SearchService {
     private readonly videosRepository: VideosRepository,
     private readonly channelsRepository: ChannelsRepository,
     private readonly usersRepository: UsersRepository,
+    private readonly streamsRepository: StreamsRepository,
   ) {}
 
   /**
-   * Search videos and channels
+   * Search videos, channels, and active streams
    */
   async search(query: string, limit: number = 20) {
     if (!query || query.trim().length === 0) {
       return {
-        results: { videos: [], channels: [] },
+        results: { videos: [], channels: [], streams: [] },
         query: '',
         totalResults: 0,
       };
     }
 
-    const [videos, channels] = await Promise.all([
-      this.videosRepository.search(query, Math.ceil(limit * 0.7)),
+    const [videos, channels, streams] = await Promise.all([
+      this.videosRepository.search(query, Math.ceil(limit * 0.5)),
       this.channelsRepository.search(query, Math.ceil(limit * 0.3)),
+      this.streamsRepository.search(query, Math.ceil(limit * 0.2)),
     ]);
 
     const formattedVideos = await Promise.all(
@@ -67,13 +70,43 @@ export class SearchService {
       }),
     );
 
+    const formattedStreams = await Promise.all(
+      streams.map(async (stream) => {
+        const user = await this.usersRepository.findOne({
+          _id: stream.userId.toString(),
+        });
+
+        return {
+          id: stream._id.toString(),
+          title: stream.title,
+          thumbnailUrl: stream.thumbnailUrl || '',
+          viewerCount: stream.viewerCount,
+          startedAt: this.formatRelativeTime(stream.startedAt || new Date()),
+          status: stream.status,
+          hlsPlaybackUrl: stream.hlsPlaybackUrl,
+          category: stream.category || 'Just Chatting',
+          streamer: {
+            id: user?._id.toString(),
+            username: user?.username || 'Unknown',
+            avatarUrl: user?.avatar || '',
+          },
+          creator: {
+            id: user?._id.toString(),
+            username: user?.username || 'Unknown',
+            avatarUrl: user?.avatar || '',
+          },
+        };
+      }),
+    );
+
     return {
       results: {
         videos: formattedVideos,
         channels: formattedChannels,
+        streams: formattedStreams,
       },
       query,
-      totalResults: videos.length + channels.length,
+      totalResults: videos.length + channels.length + streams.length,
     };
   }
 
@@ -102,7 +135,7 @@ export class SearchService {
   private formatDuration(seconds: number): string {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
 
     if (hours > 0) {
       return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
