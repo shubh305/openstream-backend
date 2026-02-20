@@ -13,6 +13,7 @@ interface VideoStatusUpdate {
   thumbnailUrl?: string;
   duration?: number;
   resolutions?: string[];
+  vttUrl?: string;
   error?: string;
 }
 
@@ -85,6 +86,30 @@ export class VodSocketGateway
 
     this.logger.debug(
       `Pushed status update for ${videoId} to ${clients.size} client(s)`,
+    );
+  }
+
+  /**
+   * Push a clip:ready event to all clients subscribed to a videoId.
+   */
+  notifyClipReady(videoId: string, clipId: string) {
+    const clients = this.subscriptions.get(videoId);
+    if (!clients || clients.size === 0) return;
+
+    const payload = JSON.stringify({
+      type: 'clip:ready',
+      videoId,
+      clipId,
+    });
+
+    for (const client of clients) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(payload);
+      }
+    }
+
+    this.logger.debug(
+      `Pushed clip:ready for clip ${clipId} to ${clients.size} client(s) of video ${videoId}`,
     );
   }
 

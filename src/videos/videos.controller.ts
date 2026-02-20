@@ -88,6 +88,40 @@ export class VideosController {
     );
   }
 
+  @ApiOperation({ summary: 'Get highlight clips for a video' })
+  @ApiResponse({ status: 200, description: 'Highlight clips with metadata' })
+  @ApiResponse({ status: 404, description: 'Video not found' })
+  @Get(':id/highlights')
+  async getHighlights(@Param('id') id: string) {
+    return await this.videosService.getHighlights(id);
+  }
+
+  @ApiOperation({ summary: 'Get subtitle tracks for a video' })
+  @ApiResponse({ status: 200, description: 'Subtitle track URLs' })
+  @ApiResponse({ status: 404, description: 'Video not found' })
+  @Get(':id/subtitles')
+  async getSubtitles(@Param('id') id: string) {
+    return await this.videosService.getSubtitles(id);
+  }
+
+  @ApiOperation({ summary: 'Get sprite thumbnail info for seekbar preview' })
+  @ApiResponse({ status: 200, description: 'Sprite thumbnail metadata' })
+  @ApiResponse({ status: 404, description: 'Video not found' })
+  @Get(':id/sprites')
+  async getSprites(@Param('id') id: string) {
+    return await this.videosService.getSprites(id);
+  }
+
+  @ApiOperation({ summary: 'Regenerate highlights for a video (Admin)' })
+  @ApiResponse({ status: 200, description: 'Highlight regeneration queued' })
+  @ApiResponse({ status: 404, description: 'Video not found' })
+  @UseGuards(AuthGuard('jwt'))
+  @Post(':id/highlights/regenerate')
+  @HttpCode(HttpStatus.OK)
+  async regenerateHighlights(@Param('id') id: string) {
+    return await this.videosService.regenerateHighlights(id);
+  }
+
   @ApiOperation({ summary: 'Get video by ID' })
   @ApiResponse({
     status: 200,

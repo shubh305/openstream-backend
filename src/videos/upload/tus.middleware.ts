@@ -109,8 +109,6 @@ export class TusMiddleware implements NestMiddleware, OnModuleInit {
   }
 
   async onModuleInit() {
-    this.workerClient.subscribeToResponseOf(PIPELINE_TOPICS.VOD_TRANSCODE_FAST);
-    this.workerClient.subscribeToResponseOf('vod.transcode.slow');
     await this.workerClient.connect();
     this.logger.log('VodWorker microservice client connected.');
   }

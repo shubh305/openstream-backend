@@ -18,11 +18,14 @@ import {
   VideoDetailDto,
 } from './dto/video.dto';
 import {
+  Video,
   VideoDocument,
   VideoStatus,
   VideoVisibility,
+  HighlightStatus,
 } from './schemas/video.schema';
 import { ChannelDocument } from '../channels/schemas/channel.schema';
+import { ConfigService } from '@nestjs/config';
 
 interface UserDoc {
   username?: string;
@@ -37,6 +40,7 @@ export class VideosService {
     private readonly usersRepository: UsersRepository,
     private readonly analyticsService: AnalyticsService,
     private readonly commentsService: CommentsService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -413,6 +417,155 @@ export class VideosService {
     }
   }
 
+  // ─────────────────────────────────────────────────────────
+  //  Content Intelligence Layer API Methods
+  // ─────────────────────────────────────────────────────────
+
+  /**
+   * Get highlight clips for a video
+   */
+  async getHighlights(videoId: string) {
+    const video = await this.videosRepository.findById(videoId);
+    if (!video) {
+      throw new NotFoundException('Video not found');
+    }
+
+    const baseUrl = this.getBaseUrl();
+    const fixRelative = (url: string | undefined | null) => {
+      if (!url) return '';
+      return url.startsWith('http') ? url : `${baseUrl}/${url}`;
+    };
+
+    const resolvedClips = (video.highlights || []).map((h) => ({
+      ...h,
+      clipUrl: fixRelative(h.clipUrl),
+      thumbnailUrl: fixRelative(h.thumbnailUrl),
+    }));
+
+    return {
+      videoId: video._id.toString(),
+      status: video.highlightStatus || 'HIGHLIGHTS_PENDING',
+      clipCount: resolvedClips.length,
+      clips: resolvedClips,
+      generatedAt: video.highlightsGeneratedAt || null,
+    };
+  }
+
+  /**
+   * Get subtitle tracks for a video
+   */
+  async getSubtitles(videoId: string) {
+    const video = await this.videosRepository.findById(videoId);
+    if (!video) {
+      throw new NotFoundException('Video not found');
+    }
+
+    const baseUrl = this.getBaseUrl();
+
+    const tracks: {
+      lang: string;
+      url: string;
+      label: string;
+      isDefault: boolean;
+    }[] = [];
+    if (video.subtitles) {
+      Object.entries(video.subtitles || {}).forEach(([lang, path]) => {
+        const url = `${baseUrl}/${path}`;
+        let label = lang;
+        if (lang === 'en') label = 'English';
+        if (lang === 'es') label = 'Spanish';
+        if (lang === 'hi') label = 'Hindi';
+        if (lang === 'fr') label = 'French';
+
+        tracks.push({
+          lang,
+          url,
+          label,
+          isDefault: lang === 'en',
+        });
+      });
+    }
+
+    return {
+      videoId: video._id.toString(),
+      subtitleStatus: video.subtitleStatus || 'SUBTITLE_PENDING',
+      accessibilityCompliant: video.accessibilityCompliant || false,
+      tracks,
+      subtitleGeneratedAt: video.subtitleGeneratedAt || null,
+    };
+  }
+
+  /**
+   * Regenerate highlights for a video - resets status and clears old clips.
+   */
+  async regenerateHighlights(videoId: string) {
+    const video = await this.videosRepository.findById(videoId);
+    if (!video) {
+      throw new NotFoundException('Video not found');
+    }
+
+    await this.videosRepository.update(videoId, {
+      highlightStatus: HighlightStatus.QUEUED,
+      highlights: [],
+      highlightsGeneratedAt: null,
+      highlightsJsonPath: null,
+    } as Partial<Video>);
+
+    return {
+      videoId: video._id.toString(),
+      status: 'queued',
+      message: 'Highlight regeneration has been queued',
+    };
+  }
+
+  /**
+   * Get sprite thumbnail info for seekbar preview.
+   */
+  async getSprites(videoId: string) {
+    const video = await this.videosRepository.findById(videoId);
+    if (!video) {
+      throw new NotFoundException('Video not found');
+    }
+
+    const baseUrl = this.getBaseUrl();
+
+    const fixLegacyUrl = (url: string | null) => {
+      if (!url) return url;
+      if (!url.startsWith('http')) return `${baseUrl}/${url}`;
+
+      if (
+        url.startsWith('https://storage.octanebrew.dev/vod/') &&
+        !url.includes('openstream-uploads')
+      ) {
+        return url.replace(
+          'storage.octanebrew.dev/vod/',
+          'storage.octanebrew.dev/openstream-uploads/vod/',
+        );
+      }
+      return url;
+    };
+
+    const s = video.sprites;
+
+    const sprites = s
+      ? {
+          status: s.status,
+          spriteUrl: fixLegacyUrl(s.spriteUrl),
+          vttUrl: fixLegacyUrl(s.vttUrl),
+          interval: s.interval,
+          cols: s.cols,
+          rows: s.rows,
+          frameCount: s.frameCount,
+          readyAt: s.readyAt,
+        }
+      : { status: 'PENDING' };
+
+    return {
+      videoId: video._id.toString(),
+      sprites,
+    };
+  }
+
   // Helper methods
 
   private async formatVideoListItem(
@@ -423,10 +576,16 @@ export class VideosService {
       this.commentsService.countByVideoId(video._id.toString()),
     ]);
 
+    const baseUrl = this.getBaseUrl();
+    const fixRelative = (url: string | undefined | null) => {
+      if (!url) return '';
+      return url.startsWith('http') ? url : `${baseUrl}/${url}`;
+    };
+
     return {
       id: video._id.toString(),
       title: video.title,
-      thumbnailUrl: video.thumbnailUrl || video.posterUrl || '',
+      thumbnailUrl: fixRelative(video.thumbnailUrl || video.posterUrl),
       duration: this.formatDuration(video.duration),
       views: video.views,
       likes: video.likes,
@@ -438,6 +597,8 @@ export class VideosService {
         username: (user as UserDoc)?.username || 'Unknown',
         avatarUrl: (user as UserDoc)?.avatar || '',
       },
+      status: video.status,
+      resolutions: video.encoding?.resolutions || [],
     };
   }
 
@@ -453,12 +614,18 @@ export class VideosService {
       video._id.toString(),
     );
 
+    const baseUrl = this.getBaseUrl();
+    const fixRelative = (url: string | undefined | null) => {
+      if (!url) return '';
+      return url.startsWith('http') ? url : `${baseUrl}/${url}`;
+    };
+
     return {
       id: video._id.toString(),
       title: video.title,
       description: video.description,
-      thumbnailUrl: video.thumbnailUrl || '',
-      posterUrl: video.posterUrl || video.thumbnailUrl || '',
+      thumbnailUrl: fixRelative(video.thumbnailUrl),
+      posterUrl: fixRelative(video.posterUrl || video.thumbnailUrl),
       videoUrl: video.hlsManifest || video.videoUrl || '',
       duration: this.formatDuration(video.duration),
       views: video.views,
@@ -482,6 +649,7 @@ export class VideosService {
         subscribed: false, // TODO: Check subscription status
       },
       resolutions: video.encoding?.resolutions || [],
+      aiMetadata: video.aiMetadata || null,
     };
   }
 
@@ -523,7 +691,6 @@ export class VideosService {
       return `${Math.floor(diffInSeconds / 2592000)} months ago`;
     return `${Math.floor(diffInSeconds / 31536000)} years ago`;
   }
-
   private formatSubscribers(count: number): string {
     if (count >= 1000000) {
       return `${(count / 1000000).toFixed(1)}M`;
@@ -532,5 +699,25 @@ export class VideosService {
       return `${(count / 1000).toFixed(1)}K`;
     }
     return count.toString();
+  }
+
+  public getBaseUrl(): string {
+    const bucket = this.configService.get<string>(
+      'MINIO_BUCKET',
+      'openstream-uploads',
+    );
+    const endpoint = this.configService.get<string>('MINIO_ENDPOINT');
+    const port = this.configService.get<string>('MINIO_PORT', '9000');
+
+    if (!endpoint) return '';
+
+    if (endpoint.startsWith('http')) {
+      return `${endpoint.replace(/\/$/, '')}/${bucket}`;
+    }
+
+    const protocol = port === '443' ? 'https' : 'http';
+    const portSuffix = port === '443' || port === '80' ? '' : `:${port}`;
+
+    return `${protocol}://${endpoint}${portSuffix}/${bucket}`;
   }
 }

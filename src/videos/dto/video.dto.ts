@@ -203,6 +203,12 @@ export class VideoListItemDto {
 
   @ApiProperty({ type: CreatorDto })
   creator: CreatorDto;
+
+  @ApiPropertyOptional({ enum: VideoStatus })
+  status?: VideoStatus;
+
+  @ApiPropertyOptional({ type: [String] })
+  resolutions?: string[];
 }
 
 export class PaginationDto {
@@ -295,4 +301,12 @@ export class VideoDetailDto {
 
   @ApiPropertyOptional({ type: [String], example: ['480p', '720p', '1080p'] })
   resolutions?: string[];
+
+  @ApiPropertyOptional()
+  aiMetadata?: {
+    summary: string | null;
+    entities: string[];
+    keyMoments: { time: number; description: string }[];
+    topic: string | null;
+  } | null;
 }

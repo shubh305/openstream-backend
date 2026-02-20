@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { SearchModule } from '../search/search.module';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { VideosController } from './videos.controller';
@@ -20,6 +21,7 @@ import { CommentsModule } from '../comments/comments.module';
     forwardRef(() => ChannelsModule),
     forwardRef(() => UsersModule),
     forwardRef(() => AnalyticsModule),
+    forwardRef(() => SearchModule),
     CommentsModule,
   ],
   controllers: [VideosController],

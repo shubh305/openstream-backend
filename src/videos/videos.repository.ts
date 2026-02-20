@@ -48,7 +48,7 @@ export class VideosRepository {
     if (!Types.ObjectId.isValid(id)) {
       return null;
     }
-    return this.videoModel.findById(id).exec();
+    return this.videoModel.findById(id).lean().exec();
   }
 
   async findMany(
@@ -111,6 +111,7 @@ export class VideosRepository {
         .sort(sortOption)
         .skip(skip)
         .limit(options.limit)
+        .lean()
         .exec(),
       this.videoModel.countDocuments(filter).exec(),
     ]);
@@ -130,6 +131,7 @@ export class VideosRepository {
       })
       .sort({ publishedAt: -1 })
       .limit(limit)
+      .lean()
       .exec();
   }
 
@@ -154,6 +156,7 @@ export class VideosRepository {
       })
       .sort({ views: -1 })
       .limit(limit)
+      .lean()
       .exec();
   }
 
@@ -177,6 +180,7 @@ export class VideosRepository {
       })
       .sort({ views: -1 })
       .limit(limit)
+      .lean()
       .exec();
   }
 

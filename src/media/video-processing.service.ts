@@ -39,9 +39,6 @@ export class VideoProcessingService {
   ) {}
 
   async onModuleInit() {
-    this.workerClient.subscribeToResponseOf('video.transcode');
-    this.workerClient.subscribeToResponseOf('video.playable');
-    this.workerClient.subscribeToResponseOf('video.complete');
     await this.workerClient.connect();
   }
 
