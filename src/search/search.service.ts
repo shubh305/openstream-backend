@@ -3,6 +3,7 @@ import { VideosRepository } from '../videos/videos.repository';
 import { ChannelsRepository } from '../channels/channels.repository';
 import { UsersRepository } from '../users/users.repository';
 import { StreamsRepository } from '../streams/streams.repository';
+import { SemanticSearchService } from './semantic-search.service';
 
 @Injectable()
 export class SearchService {
@@ -11,6 +12,7 @@ export class SearchService {
     private readonly channelsRepository: ChannelsRepository,
     private readonly usersRepository: UsersRepository,
     private readonly streamsRepository: StreamsRepository,
+    private readonly semanticSearchService: SemanticSearchService,
   ) {}
 
   /**
@@ -107,6 +109,117 @@ export class SearchService {
       },
       query,
       totalResults: videos.length + channels.length + streams.length,
+    };
+  }
+
+  /**
+   * AI-Powered Semantic Search (Hybrid)
+   */
+  async searchAI(query: string, limit: number = 20) {
+    if (!query || query.trim().length === 0) {
+      return {
+        results: { videos: [], channels: [], streams: [] },
+        query: '',
+        totalResults: 0,
+        isAI: true,
+      };
+    }
+
+    // 1. Get Semantic results from Ingestion Service
+    const semanticResults = await this.semanticSearchService.searchVideos(
+      query,
+      limit,
+    );
+
+    // 2. Fetch full creator details for these videos
+    const formattedVideos = await Promise.all(
+      semanticResults.map(async (item) => {
+        const videoId = item.entity_id;
+        const meta = item.metadata || {};
+
+        const user = await this.usersRepository.findOne({
+          _id: (meta.userId as string) || '',
+        });
+
+        return {
+          id: videoId,
+          title: item.title || (meta.title as string) || 'Untitled',
+          thumbnailUrl: (meta.thumbnailUrl as string) || '',
+          duration: this.formatDuration((meta.duration as number) || 0),
+          views: (meta.views as number) || 0,
+          uploadedAt: 'AI Match',
+          matchedExcerpt: item.matched_chunk || '',
+          score: item.score,
+          isSemantic: true,
+          keyMoments: meta.key_moments || [],
+          entities: meta.entities || [],
+          topic: meta.topic || null,
+          creator: {
+            username: user?.username || 'Unknown',
+            avatarUrl: user?.avatar || '',
+          },
+        };
+      }),
+    );
+
+    // 3. Keep channels/streams from standard Mongo search as a fallback/hybrid layer
+    const [channels, streams] = await Promise.all([
+      this.channelsRepository.search(query, Math.ceil(limit * 0.3)),
+      this.streamsRepository.search(query, Math.ceil(limit * 0.2)),
+    ]);
+
+    const formattedChannels = await Promise.all(
+      channels.map(async (channel) => {
+        const user = await this.usersRepository.findOne({
+          _id: channel.userId.toString(),
+        });
+
+        return {
+          id: channel._id.toString(),
+          name: channel.name,
+          handle: channel.handle,
+          avatarUrl: user?.avatar || '',
+          subscriberCount: channel.subscriberCount,
+        };
+      }),
+    );
+
+    const formattedStreams = await Promise.all(
+      streams.map(async (stream) => {
+        const user = await this.usersRepository.findOne({
+          _id: stream.userId.toString(),
+        });
+
+        return {
+          id: stream._id.toString(),
+          title: stream.title,
+          thumbnailUrl: stream.thumbnailUrl || '',
+          viewerCount: stream.viewerCount,
+          startedAt: this.formatRelativeTime(stream.startedAt || new Date()),
+          status: stream.status,
+          hlsPlaybackUrl: stream.hlsPlaybackUrl,
+          category: stream.category || 'Just Chatting',
+          streamer: {
+            id: user?._id.toString(),
+            username: user?.username || 'Unknown',
+            avatarUrl: user?.avatar || '',
+          },
+        };
+      }),
+    );
+
+    return {
+      results: {
+        videos: formattedVideos,
+        channels: formattedChannels,
+        streams: formattedStreams,
+      },
+      query,
+      totalResults:
+        formattedVideos.length +
+        formattedChannels.length +
+        formattedStreams.length,
+      isAI: true,
     };
   }
 
