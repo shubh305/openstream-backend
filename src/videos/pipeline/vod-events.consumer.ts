@@ -248,21 +248,27 @@ export class VodEventsConsumer {
       },
     });
 
+    const publicUrl = this.configService.get<string>('STORAGE_PUBLIC_URL');
     const bucket = this.configService.get<string>(
       'MINIO_BUCKET',
       'openstream-uploads',
     );
-    const endpoint = this.configService.get<string>('MINIO_ENDPOINT');
-    const port = this.configService.get<string>('MINIO_PORT', '9000');
 
     let baseUrl = '';
-    if (endpoint) {
-      if (endpoint.startsWith('http')) {
-        baseUrl = `${endpoint.replace(/\/$/, '')}/${bucket}`;
-      } else {
-        const protocol = port === '443' ? 'https' : 'http';
-        const portSuffix = port === '443' || port === '80' ? '' : `:${port}`;
-        baseUrl = `${protocol}://${endpoint}${portSuffix}/${bucket}`;
+    if (publicUrl) {
+      baseUrl = `${publicUrl.replace(/\/$/, '')}/${bucket}`;
+    } else {
+      const endpoint = this.configService.get<string>('MINIO_ENDPOINT');
+      const port = this.configService.get<string>('MINIO_PORT', '9000');
+
+      if (endpoint) {
+        if (endpoint.startsWith('http')) {
+          baseUrl = `${endpoint.replace(/\/$/, '')}/${bucket}`;
+        } else {
+          const protocol = port === '443' ? 'https' : 'http';
+          const portSuffix = port === '443' || port === '80' ? '' : `:${port}`;
+          baseUrl = `${protocol}://${endpoint}${portSuffix}/${bucket}`;
+        }
       }
     }
     const fullVttUrl = `${baseUrl}/${vttUrl}`;

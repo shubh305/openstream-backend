@@ -702,10 +702,16 @@ export class VideosService {
   }
 
   public getBaseUrl(): string {
+    const publicUrl = this.configService.get<string>('STORAGE_PUBLIC_URL');
     const bucket = this.configService.get<string>(
       'MINIO_BUCKET',
       'openstream-uploads',
     );
+
+    if (publicUrl) {
+      return `${publicUrl.replace(/\/$/, '')}/${bucket}`;
+    }
+
     const endpoint = this.configService.get<string>('MINIO_ENDPOINT');
     const port = this.configService.get<string>('MINIO_PORT', '9000');
 

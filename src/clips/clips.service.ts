@@ -123,20 +123,26 @@ export class ClipsService {
    * Transforms raw S3 paths into full HTTP CDN URLs.
    */
   private resolveUrls(clipObj: LeanClip): ResolvedClip {
-    const minioEndpoint = this.configService.get<string>(
-      'MINIO_ENDPOINT',
-      'http://localhost:9000',
-    );
-    let endpoint = minioEndpoint;
-    if (!endpoint.startsWith('http')) {
-      endpoint = `http://${endpoint}:9000`; // heuristic if no protocol exists
-    }
-
+    const publicUrl = this.configService.get<string>('STORAGE_PUBLIC_URL');
     const bucket = this.configService.get<string>(
       'MINIO_BUCKET',
       'openstream-uploads',
     );
-    const baseUrl = `${endpoint}/${bucket}`;
+
+    let baseUrl: string;
+    if (publicUrl) {
+      baseUrl = `${publicUrl.replace(/\/$/, '')}/${bucket}`;
+    } else {
+      const minioEndpoint = this.configService.get<string>(
+        'MINIO_ENDPOINT',
+        'http://localhost:9000',
+      );
+      let endpoint = minioEndpoint;
+      if (!endpoint.startsWith('http')) {
+        endpoint = `http://${endpoint}:9000`;
+      }
+      baseUrl = `${endpoint}/${bucket}`;
+    }
 
     // HLS is primary if READY; fallback to rawPath if PENDING or FAILED
     const playableUrl =
