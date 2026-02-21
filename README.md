@@ -45,6 +45,13 @@ The complete authoritative documentation is available in the `docs` directory:
 - **Live-to-VOD**: Automated recording and transcoding of RTMP streams upon completion.
 - **Real-Time Mesh**: High-frequency WebSocket engine for Chat rooms and Pipeline status.
 - **Adaptive Bitrate**: Complexity-aware encoding driven by I-Frame analysis.
+- **Content Intelligence Layer**:
+  - **Clip Highlights**: Automated detection and generation of highlight clips from VOD.
+  - **Smart Thumbnail Previews**: FFmpeg-generated sprite extraction mapped for progressive seekbar previews.
+  - **AI Summary**: Automated summarization using the OctaneBrew Intelligence service.
+  - **Semantic Search**: Text embedding orchestration to locate specific video concepts.
+  - **Transcriptions**: Whisper-based automated VTT generation integrated into the slow-lane pipeline.
+
 
 ---
 

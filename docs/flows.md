@@ -24,7 +24,19 @@ graph TD
         SlowLane -->|Analyze| Complexity[Complexity Analyzer<br/>I-Frame Ratio]
         Complexity -->|Calc CRF| AdaptiveEnc[Adaptive Encoding]
         AdaptiveEnc -->|Transcode| HLSMulti[HLS 720p/1080p]
+        AdaptiveEnc -->|Extract| Sprites[Sprite Thumbnails / VTT]
+        AdaptiveEnc -->|Transcribe| Subs[Auto-Subtitles]
     end
+    
+    subgraph "Intelligence Mesh"
+        Highlight[Highlight Worker]
+        IngestAI[Ingestion / AI]
+    end
+    
+    SlowLane -->|Emit| EvComp[Event: video.complete]
+    
+    EvComp -->|Dispatch| Highlight
+    EvComp -->|Dispatch| IngestAI
     
     FastLane -->|Emit| EvPlay[Event: video.playable]
     SlowLane -->|Emit| EvComp[Event: video.complete]
@@ -50,7 +62,43 @@ graph TD
     *   **Complexity Analysis**: Scans the first 30s of video to calculate the **I-Frame to P-Frame ratio**.
         *   High Motion (Gaming) = Lower CRF (High Bitrate).
         *   Low Motion (Talking Head) = Higher CRF (Low Bitrate).
-    *   **Result**: Optimized 720p/1080p HLS renditions.
+    *   **Sidecars**: Simultaneously generates Smart Thumbnails (Sprites) and triggers Whisper transcription for WebVTT accessibility.
+    *   **Result**: Optimized 720p/1080p HLS renditions + Metadata sidecars.
+
+3.  **Content Intelligence (Post-Processing)**:
+    *   Once the Slow Lane completes, downstream events trigger the **Highlight Worker** (extracts clips via audio/chat spikes) and **Ingestion API** (AI Summaries and Semantic Vector Search).
+
+### Split-Lane Execution Sequence
+
+```mermaid
+sequenceDiagram
+    participant Backend as API (OpenStream)
+    participant Kafka as Kafka Broker
+    participant Fast as Fast Lane Worker
+    participant Slow as Slow Lane Worker
+    participant Storage as MinIO Storage
+
+    Backend->>Kafka: Emit vod.transcode (Video ID)
+    
+    par Fast Lane Execution
+        Kafka->>Fast: Consume vod.transcode.fast
+        Fast->>Fast: Transcode 480p (ultrafast)
+        Fast->>Fast: Generate 1080p Cover/Thumbnail
+        Fast->>Storage: Upload HLS & Thumb
+        Fast-->>Kafka: Emit video.playable
+    and Slow Lane Execution
+        Kafka->>Slow: Consume vod.transcode.slow
+        Slow->>Slow: Complexity Analyzer (I-Frame/P-Frame ratio)
+        Slow->>Slow: Adaptive Encoding (720p/1080p with dynamic CRF)
+        par Sidecar Generation
+            Slow->>Slow: Extract Seekbar Sprites (sprites.jpg)
+            Slow->>Slow: Generate VTT crop mapping
+            Slow->>Slow: Run Whisper Transcription (en.vtt)
+        end
+        Slow->>Storage: Upload HLS, Sprites, VTTs
+        Slow-->>Kafka: Emit video.complete
+    end
+```
 
 ---
 

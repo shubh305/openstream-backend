@@ -117,6 +117,45 @@ A high-frequency ephemeral messaging system.
 *   **Room Architecture**: Each stream is a distinct "Room".
 *   **Persistence**: Chat messages are persisted to MongoDB for VOD replay ("Chat Replay").
 
+### 4. Content Intelligence Layer (AI Orchestration)
+The post-processing intelligence suite responsible for deep media understanding.
+*   **Semantic Interrogation**: Communicates via Event Bus (`openstream.ingest.results`) to receive vector embeddings and temporal key moments.
+*   **Highlight Extraction**: Manages the `HighlightStatus` state machine, dispatching jobs to the standalone `Highlight Worker` for audio/visual/chat spike analysis.
+*   **Accessibility & Enhancements**: Triggers asynchronous generation of Smart Thumbnails (VTT + Sprites) and automated WebVTT transcriptions during the Slow Lane lifecycle.
+
+```mermaid
+graph TD
+    subgraph "Event Origin"
+        KB[Kafka Broker<br/>video.complete]
+    end
+
+    subgraph "Content Intelligence Layer (OctaneBrew Hub)"
+        direction TB
+        HW[Highlight Worker<br/>Python / Signal Analysis]
+        ING[Ingestion Service<br/>FastAPI / Vector Sync]
+        
+        KB -->|Consume request| HW
+        KB -->|Consume request| ING
+        
+        HW -->|1. Signal Analysis| SA[Audio/Scene/Chat Spikes]
+        HW -->|2. Intelligence Svc| setTitle[AI Title Enrichment]
+        HW -->|3. Extract| Clips[Highlight Clips]
+        
+        ING -->|1. Intelligence Svc| Summary[Summary & Key Moments]
+        ING -->|2. Text Embedding| VDB[Elasticsearch Vector Sync]
+    end
+    
+    subgraph "Storage & State"
+        MinIO[(MinIO Object Storage)]
+        Redis[(Redis Store)]
+        ES[(Elasticsearch)]
+    end
+    
+    Clips -->|Upload .mp4| MinIO
+    Summary -->|Cache| Redis
+    VDB -->|Index| ES
+```
+
 ---
 
 ## Data Flow: The Media Lifecycle
@@ -137,6 +176,8 @@ OpenStream relies on a mesh of specialized services:
 | Service | Role | Communication |
 | :--- | :--- | :--- |
 | **FFmpeg Worker** | Video Transcoding & Tuning | Kafka (`video.transcode.*`) |
+| **Highlight Worker** | Clip Extraction & Signal Analysis | Kafka (`video.highlights.*`) |
+| **OctaneBrew Hub** | Intelligence (AI) and Search | HTTP/REST / Kafka |
 | **MinIO** | Object Storage (Video/Image) | S3 Protocol / Local Mount |
 | **MongoDB** | Metadata & State Persistence | TCP |
 | **Redis** | Job Queues & Socket State | TCP |

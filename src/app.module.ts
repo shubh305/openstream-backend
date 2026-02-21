@@ -23,6 +23,7 @@ import { UploadModule } from './upload/upload.module';
 import { SearchModule } from './search/search.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { VodPipelineModule } from './videos/vod-pipeline.module';
+import { ClipsModule } from './clips/clips.module';
 
 import { AppController } from './app.controller';
 
@@ -46,6 +47,8 @@ import * as Joi from 'joi';
         SERVICE_API_KEY: Joi.string().default(''),
         SUBTITLE_TARGET_LANGS: Joi.string().default('es,hi,fr'),
         POSTGRES_DSN: Joi.string().default(''),
+        INGESTION_SVC_URL: Joi.string().default(''),
+        WHISPER_SERVICE_URL: Joi.string().default(''),
       }),
     }),
 
@@ -88,6 +91,7 @@ import * as Joi from 'joi';
     SearchModule,
     AnalyticsModule,
     VodPipelineModule,
+    ClipsModule,
   ],
   controllers: [AppController],
   providers: [],
