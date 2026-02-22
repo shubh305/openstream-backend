@@ -82,8 +82,8 @@ async function bootstrap() {
           'KAFKA_API_CONSUMER_GROUP_ID',
           'openstream-api-consumer',
         ),
-        maxPollInterval: 1500000,
-        sessionTimeout: 300000,
+        maxPollInterval: 600000,
+        sessionTimeout: 45000,
         heartbeatInterval: 10000,
       },
       subscribe: {

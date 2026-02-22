@@ -51,6 +51,12 @@ export class SubtitleConsumer {
     );
   }
 
+  /**
+   * Main Kafka entry point for subtitle generation.
+   *
+   * This method uses a 'Fire and Forget' pattern: it updates the video status to PROCESSING
+   * and acknowledges the Kafka message immediately
+   */
   @EventPattern('video.subtitle.requests')
   async handleSubtitleRequest(@Payload() message: Record<string, unknown>) {
     const payload = (message.value ?? message) as VideoSubtitleRequestEvent;
@@ -61,25 +67,32 @@ export class SubtitleConsumer {
     }
 
     const videoId = payload.videoId;
-    this.logger.log(`Processing subtitle request for ${videoId}`);
+    this.logger.log(`Queueing subtitle job for ${videoId}`);
 
     await this.videoModel.findByIdAndUpdate(videoId, {
       $set: { subtitleStatus: SubtitleStatus.PROCESSING },
     });
 
+    // Offload to background process and return immediately to satisfy Kafka
+    void this.processTranscription(payload);
+  }
+
+  /**
+   * Orchestrates the AI pipeline: Transcription -> Semantic Ingestion -> Translation.
+   * Runs as a background task to keep the Kafka consumer responsive.
+   */
+  private async processTranscription(payload: VideoSubtitleRequestEvent) {
+    const { videoId, audioPath } = payload;
     try {
-      // Step 1: Transcribe audio → English VTT
+      // 1. Transcribe audio using whisper
       const whisperUrl =
         this.configService.get<string>('WHISPER_SERVICE_URL') || '';
       const transcriptionStart = Date.now();
-      const enVtt = await this.transcribeAudio(
-        whisperUrl,
-        payload.audioPath,
-        videoId,
-      );
+      const enVtt = await this.transcribeAudio(whisperUrl, audioPath, videoId);
       const transcriptionMs = Date.now() - transcriptionStart;
+
       this.logger.log(
-        `METRIC openstream_subtitle_transcription_duration_seconds ${(transcriptionMs / 1000).toFixed(2)} videoId=${videoId}`,
+        `Transcription finished for ${videoId} in ${(transcriptionMs / 1000).toFixed(2)}s`,
       );
 
       if (!enVtt) {
@@ -90,7 +103,7 @@ export class SubtitleConsumer {
         $set: { subtitleStatus: SubtitleStatus.TRANSCRIBED },
       });
 
-      // Step 2: Upload English VTT to MinIO
+      // 2. Upload English VTT to MinIO
       const enVttPath = `subtitles/${videoId}/en.vtt`;
       await this.uploadVtt(enVttPath, enVtt);
 
@@ -99,11 +112,8 @@ export class SubtitleConsumer {
       ];
       this.metrics.tracksGenerated['en'] =
         (this.metrics.tracksGenerated['en'] || 0) + 1;
-      this.logger.log(
-        `METRIC openstream_subtitle_tracks_generated_total lang=en`,
-      );
 
-      // Step 2.5: Ingest into Semantic Search
+      // 3. Ingest into Semantic Search
       try {
         const video = await this.videoModel.findById(videoId);
         if (video) {
@@ -125,11 +135,11 @@ export class SubtitleConsumer {
         }
       } catch (err: unknown) {
         this.logger.error(
-          `Semantic ingestion failed for ${videoId}: ${String(err)}`,
+          `[ASYNC] Semantic ingestion failed for ${videoId}: ${String(err)}`,
         );
       }
 
-      // Step 3: Translate to target languages
+      // 4. Translate to target languages
       await this.videoModel.findByIdAndUpdate(videoId, {
         $set: { subtitleStatus: SubtitleStatus.TRANSLATING },
       });
@@ -156,25 +166,19 @@ export class SubtitleConsumer {
             tracks.push({ lang, path: translatedPath });
             this.metrics.tracksGenerated[lang] =
               (this.metrics.tracksGenerated[lang] || 0) + 1;
-            this.logger.log(
-              `METRIC openstream_subtitle_tracks_generated_total lang=${lang}`,
-            );
           } else {
             failedLangs.push(lang);
           }
         } catch (error) {
           this.logger.warn(
-            `Translation to ${lang} failed for ${videoId}: ${String(error)}`,
+            `[ASYNC] Translation to ${lang} failed for ${videoId}: ${String(error)}`,
           );
           failedLangs.push(lang);
           this.metrics.failures.translation++;
-          this.logger.log(
-            `METRIC openstream_subtitle_failures_total stage=translation lang=${lang}`,
-          );
         }
       }
 
-      // Step 4: Emit completion event
+      // 5. Finalize status and emit completion event
       if (failedLangs.length > 0) {
         const event: VideoSubtitleDegradedEvent = {
           videoId,
@@ -194,20 +198,14 @@ export class SubtitleConsumer {
         };
         this.kafkaClient.emit(PIPELINE_TOPICS.VIDEO_SUBTITLE_COMPLETE, event);
         this.metrics.jobsTotal.complete++;
-        this.logger.log(
-          `METRIC openstream_subtitle_jobs_total status=complete | Subtitle COMPLETE for ${videoId}: ${tracks.map((t) => t.lang).join(', ')}`,
-        );
+        this.logger.log(`Subtitle pipeline COMPLETE for ${videoId}`);
       }
     } catch (error: unknown) {
       const errMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Subtitle processing failed for ${videoId}: ${errMessage}`,
+        `Background subtitle processing failed for ${videoId}: ${errMessage}`,
       );
       this.metrics.jobsTotal.failed++;
-      this.logger.log(`METRIC openstream_subtitle_jobs_total status=failed`);
-      this.logger.log(
-        `METRIC openstream_subtitle_failures_total stage=transcription`,
-      );
 
       const failedEvent: VideoSubtitleFailedEvent = {
         videoId,
@@ -315,7 +313,7 @@ export class SubtitleConsumer {
         `${whisperUrl}/v1/audio/transcriptions`,
         formData,
         {
-          timeout: 1800000,
+          timeout: 14400000,
         },
       );
 
