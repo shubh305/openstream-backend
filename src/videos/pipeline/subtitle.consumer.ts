@@ -315,7 +315,7 @@ export class SubtitleConsumer {
         `${whisperUrl}/v1/audio/transcriptions`,
         formData,
         {
-          timeout: 300000,
+          timeout: 1800000,
         },
       );
 

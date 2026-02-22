@@ -204,7 +204,10 @@ export class VodEventsConsumer {
     });
 
     // Dispatch highlight generation if enabled
-    await this.dispatchHighlightRequest(payload);
+    const isFinalPass = payload.resolutions?.includes('1080p');
+    if (isFinalPass) {
+      await this.dispatchHighlightRequest(payload);
+    }
   }
 
   // ─────────────────────────────────────────────────────────
