@@ -10,6 +10,7 @@ import {
   Req,
   HttpCode,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
@@ -19,6 +20,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { PlaylistsService } from './playlists.service';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import {
   CreatePlaylistDto,
   UpdatePlaylistDto,
@@ -37,8 +39,14 @@ export class PlaylistsController {
   @ApiResponse({ status: 200, description: 'List of playlists' })
   @UseGuards(AuthGuard('jwt'))
   @Get()
-  async getUserPlaylists(@Req() req: AuthRequest) {
-    return this.playlistsService.getUserPlaylists(req.user._id.toString());
+  async getUserPlaylists(
+    @Req() req: AuthRequest,
+    @Query('videoId') videoId?: string,
+  ) {
+    return this.playlistsService.getUserPlaylists(
+      req.user._id.toString(),
+      videoId,
+    );
   }
 
   @ApiBearerAuth()
@@ -53,6 +61,7 @@ export class PlaylistsController {
   @ApiOperation({ summary: 'Get playlist by ID' })
   @ApiResponse({ status: 200, description: 'Playlist with videos' })
   @ApiResponse({ status: 404, description: 'Playlist not found' })
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(':id')
   async getPlaylistById(
     @Param('id') id: string,

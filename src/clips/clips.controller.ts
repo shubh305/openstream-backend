@@ -12,11 +12,15 @@ export class ClipsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('signal') signal?: string,
+    @Query('sortBy') sortBy?: 'score' | 'createdAt',
+    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
   ): Promise<PaginatedClips> {
     return this.clipsService.getClips({
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 20,
       signal,
+      sortBy,
+      sortOrder,
     });
   }
 

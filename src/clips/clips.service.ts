@@ -11,7 +11,6 @@ export interface ClipsFilter {
   sortBy?: 'score' | 'createdAt';
   sortOrder?: 'asc' | 'desc';
 }
-
 export interface ResolvedClip extends Clip {
   _id: string; // From lean() or mongo
   playableUrl: string;
@@ -26,6 +25,27 @@ export interface PaginatedClips {
 }
 
 type LeanClip = Clip & { _id: Types.ObjectId };
+
+interface HighlightSignal {
+  audio_spike?: number;
+  audio?: number;
+  chat_spike?: number;
+  chat?: number;
+  ocr_keyword?: number;
+  ocr?: number;
+  scene_change?: number;
+  scene?: number;
+}
+
+interface ParentVideo {
+  _id: Types.ObjectId;
+  title: string;
+  highlights: {
+    start: number;
+    score: number;
+    signals: HighlightSignal;
+  }[];
+}
 
 @Injectable()
 export class ClipsService {
@@ -50,19 +70,56 @@ export class ClipsService {
       }
     }
 
-    const sortBy = filter.sortBy || 'score';
+    const sortBy = filter.sortBy || 'createdAt';
     const sortOrder = filter.sortOrder === 'asc' ? 1 : -1;
     const sortQuery: Record<string, 1 | -1> = { [sortBy]: sortOrder };
 
     const total = await this.clipModel.countDocuments(query);
-    const clips = await this.clipModel
+    const clipsRaw = (await this.clipModel
       .find(query)
       .sort(sortQuery)
       .skip(skip)
       .limit(limit)
-      .populate('parentVideoId', 'title')
+      .populate<{
+        parentVideoId: ParentVideo;
+      }>('parentVideoId', 'title highlights')
       .lean()
-      .exec();
+      .exec()) as unknown as LeanClip[];
+
+    const clips = clipsRaw.map((clip) => {
+      const parentVideo = clip.parentVideoId as unknown as ParentVideo;
+      if (parentVideo && parentVideo.highlights) {
+        const matchingHighlight = parentVideo.highlights.find(
+          (h) => Math.abs(h.start - clip.start) < 0.5,
+        );
+        if (matchingHighlight) {
+          clip.signals = {
+            audio:
+              this.resolveSignalValue(
+                matchingHighlight.signals.audio_spike ||
+                  matchingHighlight.signals.audio,
+              ) > 0,
+            chat:
+              this.resolveSignalValue(
+                matchingHighlight.signals.chat_spike ||
+                  matchingHighlight.signals.chat,
+              ) > 0,
+            ocr:
+              this.resolveSignalValue(
+                matchingHighlight.signals.ocr_keyword ||
+                  matchingHighlight.signals.ocr,
+              ) > 0,
+            scene:
+              this.resolveSignalValue(
+                matchingHighlight.signals.scene_change ||
+                  matchingHighlight.signals.scene,
+              ) > 0,
+          };
+          clip.score = this.resolveSignalValue(matchingHighlight.score);
+        }
+      }
+      return clip;
+    });
 
     return {
       data: clips.map((clip) => this.resolveUrls(clip as unknown as LeanClip)),
@@ -89,11 +146,51 @@ export class ClipsService {
    * Retrieves a single clip by its short ID.
    */
   async getClipById(clipId: string): Promise<ResolvedClip> {
-    const clip = await this.clipModel
+    const clipRaw = await this.clipModel
       .findOne({ clipId })
-      .populate('parentVideoId', 'title')
+      .populate<{
+        parentVideoId: ParentVideo;
+      }>('parentVideoId', 'title highlights')
       .lean()
       .exec();
+
+    if (!clipRaw) {
+      throw new NotFoundException(`Clip ${clipId} not found`);
+    }
+
+    const clip = clipRaw as unknown as LeanClip;
+    const parentVideo = clip.parentVideoId as unknown as ParentVideo;
+
+    if (parentVideo && parentVideo.highlights) {
+      const matchingHighlight = parentVideo.highlights.find(
+        (h) => Math.abs(h.start - clip.start) < 0.5,
+      );
+      if (matchingHighlight) {
+        clip.signals = {
+          audio:
+            this.resolveSignalValue(
+              matchingHighlight.signals.audio_spike ||
+                matchingHighlight.signals.audio,
+            ) > 0,
+          chat:
+            this.resolveSignalValue(
+              matchingHighlight.signals.chat_spike ||
+                matchingHighlight.signals.chat,
+            ) > 0,
+          ocr:
+            this.resolveSignalValue(
+              matchingHighlight.signals.ocr_keyword ||
+                matchingHighlight.signals.ocr,
+            ) > 0,
+          scene:
+            this.resolveSignalValue(
+              matchingHighlight.signals.scene_change ||
+                matchingHighlight.signals.scene,
+            ) > 0,
+        };
+        clip.score = this.resolveSignalValue(matchingHighlight.score);
+      }
+    }
 
     if (!clip) {
       throw new NotFoundException(`Clip ${clipId} not found`);
@@ -162,5 +259,10 @@ export class ClipsService {
       playableUrl,
       thumbnailResolvedUrl: thumbnailUrl,
     } as ResolvedClip;
+  }
+
+  private resolveSignalValue(value: number | undefined | null): number {
+    if (value === undefined || value === null) return 0;
+    return Number(value.toFixed(2));
   }
 }

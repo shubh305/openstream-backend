@@ -32,13 +32,33 @@ export class PlaylistsService {
   /**
    * Get user's playlists
    */
-  async getUserPlaylists(userId: string) {
+  async getUserPlaylists(userId: string, videoId?: string) {
     const playlists = await this.playlistModel
-      .find({ userId: new Types.ObjectId(userId), isWatchLater: false })
+      .find({ userId: new Types.ObjectId(userId) })
       .sort({ updatedAt: -1 })
       .exec();
 
-    return playlists.map((p) => this.formatPlaylist(p));
+    return Promise.all(
+      playlists.map(async (p) => {
+        const formatted = await this.formatPlaylistWithThumb(p);
+
+        if (videoId && Types.ObjectId.isValid(videoId)) {
+          const itemInPlaylist = await this.playlistItemModel
+            .findOne({
+              playlistId: p._id,
+              videoId: new Types.ObjectId(videoId),
+            })
+            .exec();
+
+          return {
+            ...formatted,
+            includesVideo: !!itemInPlaylist,
+          };
+        }
+
+        return formatted;
+      }),
+    );
   }
 
   /**
@@ -58,7 +78,7 @@ export class PlaylistsService {
       .sort({ updatedAt: -1 })
       .exec();
 
-    return playlists.map((p) => this.formatPlaylist(p));
+    return Promise.all(playlists.map((p) => this.formatPlaylistWithThumb(p)));
   }
 
   /**
@@ -89,9 +109,10 @@ export class PlaylistsService {
         );
         if (!video) return null;
 
-        const channel = await this.channelsRepository.findById(
-          video.channelId.toString(),
-        );
+        const [channel, user] = await Promise.all([
+          this.channelsRepository.findById(video.channelId.toString()),
+          this.usersRepository.findOne({ _id: video.userId.toString() }),
+        ]);
 
         return {
           id: video._id.toString(),
@@ -99,6 +120,10 @@ export class PlaylistsService {
           thumbnailUrl: video.thumbnailUrl || '',
           duration: this.formatDuration(video.duration),
           channelName: channel?.name || 'Unknown',
+          creator: {
+            username: channel?.name || 'Unknown',
+            avatarUrl: user?.avatar || '',
+          },
           order: item.order,
         };
       }),
@@ -356,6 +381,27 @@ export class PlaylistsService {
     return playlist;
   }
 
+  private async formatPlaylistWithThumb(playlist: PlaylistDocument) {
+    const base = this.formatPlaylist(playlist);
+
+    // Get first video thumbnail
+    const firstItem = await this.playlistItemModel
+      .findOne({ playlistId: playlist._id })
+      .sort({ order: 1 })
+      .exec();
+
+    if (firstItem) {
+      const video = await this.videosRepository.findById(
+        firstItem.videoId.toString(),
+      );
+      if (video) {
+        base.thumbnailUrl = video.thumbnailUrl || '';
+      }
+    }
+
+    return base;
+  }
+
   private formatPlaylist(playlist: PlaylistDocument) {
     return {
       id: playlist._id.toString(),
@@ -363,14 +409,15 @@ export class PlaylistsService {
       description: playlist.description,
       visibility: playlist.visibility,
       videoCount: playlist.videoCount,
-      thumbnailUrl: '', // TODO: Get first video thumbnail
+      thumbnailUrl: '',
       updatedAt: this.formatRelativeTime(playlist.updatedAt),
     };
   }
 
   private formatDuration(seconds: number): string {
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const totalSeconds = Math.round(seconds);
+    const minutes = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
   }
 
