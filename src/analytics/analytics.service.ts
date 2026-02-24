@@ -58,6 +58,7 @@ interface EngagementTrendPoint {
 @Injectable()
 export class AnalyticsService {
   private readonly hubUrl: string;
+  private readonly apiKey: string;
 
   constructor(
     @InjectModel(DailyAnalytics.name)
@@ -69,6 +70,7 @@ export class AnalyticsService {
     @Inject('ANALYTICS_SERVICE') private readonly kafkaClient: ClientKafka,
   ) {
     this.hubUrl = this.configService.get<string>('ANALYTICS_HUB_URL', '');
+    this.apiKey = this.configService.get<string>('SERVICE_API_KEY', '');
   }
 
   /**
@@ -191,24 +193,36 @@ export class AnalyticsService {
     try {
       const [statsRes, trendRes] = await Promise.all([
         firstValueFrom(
-          this.httpService.post<OverviewStats[]>(`${this.hubUrl}/report`, {
-            template: 'overview_stats',
-            params: {
-              app_id: 'openstream',
-              days: intervalDays,
-              channel_id: channel._id.toString(),
+          this.httpService.post<OverviewStats[]>(
+            `${this.hubUrl}/report`,
+            {
+              template: 'overview_stats',
+              params: {
+                app_id: 'openstream',
+                days: intervalDays,
+                channel_id: channel._id.toString(),
+              },
             },
-          }),
+            {
+              headers: { 'X-API-KEY': this.apiKey },
+            },
+          ),
         ),
         firstValueFrom(
-          this.httpService.post<any[]>(`${this.hubUrl}/report`, {
-            template: 'chronological_trend',
-            params: {
-              app_id: 'openstream',
-              days: intervalDays,
-              channel_id: channel._id.toString(),
+          this.httpService.post<any[]>(
+            `${this.hubUrl}/report`,
+            {
+              template: 'chronological_trend',
+              params: {
+                app_id: 'openstream',
+                days: intervalDays,
+                channel_id: channel._id.toString(),
+              },
             },
-          }),
+            {
+              headers: { 'X-API-KEY': this.apiKey },
+            },
+          ),
         ),
       ]);
 
@@ -255,22 +269,34 @@ export class AnalyticsService {
     try {
       const [statsRes, velocityRes] = await Promise.all([
         firstValueFrom(
-          this.httpService.post<RealtimeStats[]>(`${this.hubUrl}/report`, {
-            template: 'realtime_stats',
-            params: {
-              app_id: 'openstream',
-              channel_id: channel._id.toString(),
+          this.httpService.post<RealtimeStats[]>(
+            `${this.hubUrl}/report`,
+            {
+              template: 'realtime_stats',
+              params: {
+                app_id: 'openstream',
+                channel_id: channel._id.toString(),
+              },
             },
-          }),
+            {
+              headers: { 'X-API-KEY': this.apiKey },
+            },
+          ),
         ),
         firstValueFrom(
-          this.httpService.post<VelocityPoint[]>(`${this.hubUrl}/report`, {
-            template: 'realtime_velocity',
-            params: {
-              app_id: 'openstream',
-              channel_id: channel._id.toString(),
+          this.httpService.post<VelocityPoint[]>(
+            `${this.hubUrl}/report`,
+            {
+              template: 'realtime_velocity',
+              params: {
+                app_id: 'openstream',
+                channel_id: channel._id.toString(),
+              },
             },
-          }),
+            {
+              headers: { 'X-API-KEY': this.apiKey },
+            },
+          ),
         ),
       ]);
 
@@ -340,15 +366,21 @@ export class AnalyticsService {
 
     try {
       const response = await firstValueFrom(
-        this.httpService.post<TopContentItem[]>(`${this.hubUrl}/report`, {
-          template: 'top_content',
-          params: {
-            app_id: 'openstream',
-            days: intervalDays,
-            limit: 10,
-            channel_id: channel._id.toString(),
+        this.httpService.post<TopContentItem[]>(
+          `${this.hubUrl}/report`,
+          {
+            template: 'top_content',
+            params: {
+              app_id: 'openstream',
+              days: intervalDays,
+              limit: 10,
+              channel_id: channel._id.toString(),
+            },
           },
-        }),
+          {
+            headers: { 'X-API-KEY': this.apiKey },
+          },
+        ),
       );
 
       const items = response.data;
@@ -415,18 +447,27 @@ export class AnalyticsService {
                 channel_id: channel._id.toString(),
               },
             },
+            {
+              headers: { 'X-API-KEY': this.apiKey },
+            },
           ),
         ),
         firstValueFrom(
-          this.httpService.post<SearchQueryStats[]>(`${this.hubUrl}/report`, {
-            template: 'search_analytics',
-            params: {
-              app_id: 'openstream',
-              days,
-              limit: 10,
-              channel_id: channel._id.toString(),
+          this.httpService.post<SearchQueryStats[]>(
+            `${this.hubUrl}/report`,
+            {
+              template: 'search_analytics',
+              params: {
+                app_id: 'openstream',
+                days,
+                limit: 10,
+                channel_id: channel._id.toString(),
+              },
             },
-          }),
+            {
+              headers: { 'X-API-KEY': this.apiKey },
+            },
+          ),
         ),
       ]);
 
