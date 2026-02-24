@@ -45,10 +45,14 @@ export class ClipsEventsConsumer {
 
       // Emit analytics to `octane.events`
       this.kafkaClient.emit('octane.events', {
-        event: 'clip.ready',
-        clipId: clip.clipId,
-        parentVideoId: clip.parentVideoId.toString(),
-        ts: Date.now(),
+        app_id: 'openstream',
+        event_name: 'clip.ready',
+        user_id: clip.ownerId.toString(),
+        timestamp: new Date().toISOString(),
+        properties: {
+          clipId: clip.clipId,
+          parentVideoId: clip.parentVideoId.toString(),
+        },
       });
     }
   }
