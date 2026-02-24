@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Injectable, ForbiddenException, Inject } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, UpdateQuery } from 'mongoose';
 import {
@@ -7,6 +7,11 @@ import {
 } from './schemas/daily-analytics.schema';
 import { ChannelsRepository } from '../channels/channels.repository';
 import { VideosRepository } from '../videos/videos.repository';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
+import { ConfigService } from '@nestjs/config';
+import { ClientKafka } from '@nestjs/microservices';
+import { VideoDocument } from '../videos/schemas/video.schema';
 
 interface DailyAnalyticsFilter {
   channelId: Types.ObjectId;
@@ -14,66 +19,161 @@ interface DailyAnalyticsFilter {
   videoId: Types.ObjectId | null;
 }
 
-interface AnalyticsStats {
-  totalViews: number;
-  totalLikes: number;
-  totalComments: number;
-  totalSubscribersGained: number;
-  totalWatchTime: number;
+interface OverviewStats {
+  views: number | string;
+  watch_time_hours: number | string;
+  subscriber_change: number | string;
+  avg_view_duration: number | string;
+}
+
+interface RealtimeStats {
+  active_viewers: number | string;
+}
+
+interface VelocityPoint {
+  hour: string;
+  views: number | string;
+}
+
+interface TopContentItem {
+  video_id: string;
+  title: string;
+  thumbnail_url: string;
+  views: number | string;
+  avg_view_duration: number | string;
+}
+
+interface SearchQueryStats {
+  query: string;
+  count: number | string;
+}
+
+interface EngagementTrendPoint {
+  bucket: string;
+  comments: number | string;
+  likes: number | string;
+  shares: number | string;
 }
 
 @Injectable()
 export class AnalyticsService {
+  private readonly hubUrl: string;
+
   constructor(
     @InjectModel(DailyAnalytics.name)
     private dailyAnalyticsModel: Model<DailyAnalyticsDocument>,
     private readonly channelsRepository: ChannelsRepository,
     private readonly videosRepository: VideosRepository,
-  ) {}
+    private readonly httpService: HttpService,
+    private readonly configService: ConfigService,
+    @Inject('ANALYTICS_SERVICE') private readonly kafkaClient: ClientKafka,
+  ) {
+    this.hubUrl = this.configService.get<string>('ANALYTICS_HUB_URL', '');
+  }
 
   /**
    * Track an analytics event
    */
   async trackEvent(
-    type: 'view' | 'like' | 'comment' | 'subscribe' | 'unsubscribe' | 'share',
-    channelId: string,
+    type:
+      | 'view'
+      | 'like'
+      | 'comment'
+      | 'subscribe'
+      | 'unsubscribe'
+      | 'share'
+      | 'search',
+    channelId?: string,
     videoId?: string,
     value: number = 1,
+    metadata: Record<string, unknown> = {},
   ) {
-    const today = new Date().toISOString().split('T')[0];
-    const update: UpdateQuery<DailyAnalyticsDocument> = {};
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const update: UpdateQuery<DailyAnalyticsDocument> = {};
 
-    switch (type) {
-      case 'view':
-        update.$inc = { views: value };
-        break;
-      case 'like':
-        update.$inc = { likes: value };
-        break;
-      case 'comment':
-        update.$inc = { comments: value };
-        break;
-      case 'share':
-        update.$inc = { shares: value };
-        break;
-      case 'subscribe':
-        update.$inc = { newSubscribers: value };
-        break;
-      case 'unsubscribe':
-        update.$inc = { newSubscribers: -value };
-        break;
+      // Legacy Mongoose Update
+      switch (type) {
+        case 'view':
+          update.$inc = { views: value };
+          break;
+        case 'like':
+          update.$inc = { likes: value };
+          break;
+        case 'comment':
+          update.$inc = { comments: value };
+          break;
+        case 'share':
+          update.$inc = { shares: value };
+          break;
+        case 'subscribe':
+          update.$inc = { newSubscribers: value };
+          break;
+        case 'unsubscribe':
+          update.$inc = { newSubscribers: -value };
+          break;
+        case 'search':
+          break;
+      }
+
+      if (channelId) {
+        const filter: DailyAnalyticsFilter = {
+          channelId: new Types.ObjectId(channelId),
+          date: today,
+          videoId: videoId ? new Types.ObjectId(videoId) : null,
+        };
+
+        try {
+          await this.dailyAnalyticsModel.findOneAndUpdate(filter, update, {
+            upsert: true,
+          });
+        } catch (e) {
+          console.error('Track event mongoose error:', e);
+        }
+      }
+
+      // Hub Integration
+      const eventName = type === 'view' ? 'video_view' : type;
+      await this.trackGenericEvent(
+        eventName,
+        {
+          channel_id: channelId || 'global',
+          video_id: videoId || null,
+          value,
+          ...metadata,
+        },
+        'anonymous',
+      );
+    } catch (e) {
+      console.error('Track event error:', e);
     }
+  }
 
-    // Upsert daily record for this channel/video
-    const filter: DailyAnalyticsFilter = {
-      channelId: new Types.ObjectId(channelId),
-      date: today,
-      videoId: videoId ? new Types.ObjectId(videoId) : null,
-    };
-
-    await this.dailyAnalyticsModel.findOneAndUpdate(filter, update, {
-      upsert: true,
-    });
+  /**
+   * Push a generic event to the Analytics Hub via Kafka
+   */
+  async trackGenericEvent(
+    eventName: string,
+    properties: Record<string, unknown>,
+    userId: string = 'anonymous',
+  ) {
+    try {
+      await firstValueFrom(
+        this.kafkaClient.emit('octane.events', {
+          app_id: 'openstream',
+          event_name: eventName,
+          user_id: userId,
+          timestamp: new Date().toISOString(),
+          properties: {
+            ...properties,
+            platform: 'web',
+            user_agent: (properties.user_agent as string) || 'unknown',
+          },
+        }),
+      );
+    } catch (e) {
+      console.error(`Failed to emit event ${eventName}:`, e);
+    }
   }
 
   /**
@@ -85,73 +185,64 @@ export class AnalyticsService {
       return this.getEmptyAnalytics(period);
     }
 
-    // Determine date range
-    const endDate = new Date();
-    const startDate = new Date();
+    const intervalDays =
+      period === 'last7days' ? 7 : period === 'today' ? 1 : 28;
 
-    if (period === 'last7days') {
-      startDate.setDate(endDate.getDate() - 7);
-    } else if (period === 'today') {
-      // today (start is same day 00:00 - handled by ISO string split logic usually,
-      // but for simple query we can just filter by date string >= today's string)
-    } else {
-      // Default last 28 days
-      startDate.setDate(endDate.getDate() - 28);
-    }
-
-    const startStr = startDate.toISOString().split('T')[0];
-    const endStr = endDate.toISOString().split('T')[0];
-
-    // Aggregate data
-    const analytics = await this.dailyAnalyticsModel.aggregate<AnalyticsStats>([
-      {
-        $match: {
-          channelId: channel._id,
-          date: { $gte: startStr, $lte: endStr },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalViews: { $sum: '$views' },
-          totalLikes: { $sum: '$likes' },
-          totalComments: { $sum: '$comments' },
-          totalSubscribersGained: { $sum: '$newSubscribers' },
-          totalWatchTime: { $sum: '$watchTimeSeconds' },
-        },
-      },
-    ]);
-
-    const stats = analytics[0] || {
-      totalViews: 0,
-      totalLikes: 0,
-      totalComments: 0,
-      totalSubscribersGained: 0,
-      totalWatchTime: 0,
-    };
-
-    return {
-      overview: {
-        views: this.formatNumber(stats.totalViews),
-        watchTimeHours: this.formatNumber(
-          Math.floor(stats.totalWatchTime / 3600),
+    try {
+      const [statsRes, trendRes] = await Promise.all([
+        firstValueFrom(
+          this.httpService.post<OverviewStats[]>(`${this.hubUrl}/report`, {
+            template: 'overview_stats',
+            params: {
+              app_id: 'openstream',
+              days: intervalDays,
+              channel_id: channel._id.toString(),
+            },
+          }),
         ),
-        subscribers: channel.subscriberCount,
-        subscriberChange: stats.totalSubscribersGained,
-        estimatedRevenue: null,
-      },
-      period,
-      trends: {
-        views: this.calculateTrend(stats.totalViews), // Placeholder for actual trend calc
-        watchTime: this.calculateTrend(stats.totalWatchTime),
-        subscribers: this.calculateTrend(stats.totalSubscribersGained),
-      },
-    };
-  }
+        firstValueFrom(
+          this.httpService.post<any[]>(`${this.hubUrl}/report`, {
+            template: 'chronological_trend',
+            params: {
+              app_id: 'openstream',
+              days: intervalDays,
+              channel_id: channel._id.toString(),
+            },
+          }),
+        ),
+      ]);
 
-  private calculateTrend(value: number): number {
-    // Simple mock trend for UI visual
-    return value > 0 ? 10 : 0;
+      const stats = statsRes.data[0] || {
+        views: 0,
+        watch_time_hours: 0,
+        subscriber_change: 0,
+        avg_view_duration: 0,
+      };
+
+      return {
+        overview: {
+          views: this.formatNumber(Number(stats.views)),
+          watchTimeHours: this.formatNumber(Number(stats.watch_time_hours)),
+          subscribers: channel.subscriberCount,
+          subscriberChange: Number(stats.subscriber_change),
+          avgViewDuration: this.formatDuration(
+            Math.floor(Number(stats.avg_view_duration || 0)),
+          ),
+          estimatedRevenue: null,
+        },
+        trend: trendRes.data,
+        period,
+        trends: {
+          views: 10,
+          watchTime: 12,
+          subscribers: 5,
+        },
+      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Analytics Hub query error:', message);
+      return this.getEmptyAnalytics(period);
+    }
   }
 
   /**
@@ -159,20 +250,45 @@ export class AnalyticsService {
    */
   async getRealtimeAnalytics(userId: string) {
     const channel = await this.channelsRepository.findByUserId(userId);
-    if (!channel) {
+    if (!channel) return { currentViewers: 0, views48Hours: [] };
+
+    try {
+      const [statsRes, velocityRes] = await Promise.all([
+        firstValueFrom(
+          this.httpService.post<RealtimeStats[]>(`${this.hubUrl}/report`, {
+            template: 'realtime_stats',
+            params: {
+              app_id: 'openstream',
+              channel_id: channel._id.toString(),
+            },
+          }),
+        ),
+        firstValueFrom(
+          this.httpService.post<VelocityPoint[]>(`${this.hubUrl}/report`, {
+            template: 'realtime_velocity',
+            params: {
+              app_id: 'openstream',
+              channel_id: channel._id.toString(),
+            },
+          }),
+        ),
+      ]);
+
+      const stats = statsRes.data[0] || { active_viewers: 0 };
+      const velocity = velocityRes.data;
+
+      return {
+        currentViewers: Number(stats.active_viewers || 0),
+        views48Hours: velocity.map((row) => ({
+          hour: row.hour,
+          views: Number(row.views),
+        })),
+      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Realtime Hub query error:', message);
       return { currentViewers: 0, views48Hours: [] };
     }
-
-    // Generate mock 48-hour data
-    const views48Hours = Array.from({ length: 48 }, (_, i) => ({
-      hour: i,
-      views: Math.floor(Math.random() * 100),
-    }));
-
-    return {
-      currentViewers: 0, // TODO: Track active viewers
-      views48Hours,
-    };
   }
 
   /**
@@ -199,7 +315,7 @@ export class AnalyticsService {
         ctr: `${Math.floor(Math.random() * 20) + 5}%`,
         avgDuration: this.formatDuration(Math.floor(video.duration * 0.6)),
         likes: video.likes,
-        comments: 0, // TODO: Count comments
+        comments: 0,
       },
       comparison: {
         period: 'first24hours',
@@ -220,24 +336,118 @@ export class AnalyticsService {
       return { videos: [], period };
     }
 
-    const videos = await this.videosRepository.findByChannelId(
-      channel._id.toString(),
-      10,
-    );
+    const intervalDays = period === 'last7days' ? 7 : 28;
 
-    // Sort by views for top content
-    const sortedVideos = [...videos].sort((a, b) => b.views - a.views);
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post<TopContentItem[]>(`${this.hubUrl}/report`, {
+          template: 'top_content',
+          params: {
+            app_id: 'openstream',
+            days: intervalDays,
+            limit: 10,
+            channel_id: channel._id.toString(),
+          },
+        }),
+      );
 
-    return {
-      videos: sortedVideos.map((video, index) => ({
-        id: video._id.toString(),
-        title: video.title,
-        thumbnailUrl: video.thumbnailUrl || '',
-        views: video.views,
-        rank: index + 1,
-      })),
-      period,
-    };
+      const items = response.data;
+      const videoIds = items.map((i) => i.video_id);
+      const videos = await this.videosRepository.findManyByIds(videoIds);
+
+      const videoMap = new Map<string, VideoDocument>(
+        videos
+          .filter((v) => v.userId.toString() === userId)
+          .map((v) => [v._id.toString(), v]),
+      );
+      const baseUrl = this.videosRepository.getBaseUrl();
+
+      return {
+        videos: items
+          .filter((item) => videoMap.has(item.video_id))
+          .map((item, index) => {
+            const video = videoMap.get(item.video_id)!;
+            return {
+              id: item.video_id,
+              title: video.title || item.title || 'Untitled Sequence',
+              thumbnailUrl: video
+                ? video.thumbnailUrl?.startsWith('http')
+                  ? video.thumbnailUrl
+                  : `${baseUrl}/${video.thumbnailUrl}`
+                : item.thumbnail_url,
+              views: Number(item.views),
+              avgViewDuration: this.formatDuration(
+                Math.floor(Number(item.avg_view_duration || 0)),
+              ),
+              rank: index + 1,
+            };
+          }),
+        period,
+      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Top content report error:', message);
+      return { videos: [], period };
+    }
+  }
+
+  /**
+   * Get engagement analytics (social + search)
+   */
+  async getEngagementAnalytics(userId: string, period: string = 'last28days') {
+    const channel = await this.channelsRepository.findByUserId(userId);
+    if (!channel) return { trend: [], topSearches: [], period };
+
+    const days = period === 'last7days' ? 7 : period === 'today' ? 1 : 28;
+    const interval = days >= 7 ? '1 day' : '1 hour';
+
+    try {
+      const [engagementRes, searchRes] = await Promise.all([
+        firstValueFrom(
+          this.httpService.post<EngagementTrendPoint[]>(
+            `${this.hubUrl}/report`,
+            {
+              template: 'engagement_trend',
+              params: {
+                app_id: 'openstream',
+                days,
+                interval,
+                channel_id: channel._id.toString(),
+              },
+            },
+          ),
+        ),
+        firstValueFrom(
+          this.httpService.post<SearchQueryStats[]>(`${this.hubUrl}/report`, {
+            template: 'search_analytics',
+            params: {
+              app_id: 'openstream',
+              days,
+              limit: 10,
+              channel_id: channel._id.toString(),
+            },
+          }),
+        ),
+      ]);
+
+      return {
+        trend: engagementRes.data.map((p) => ({
+          bucket: p.bucket,
+          comments: Number(p.comments),
+          likes: Number(p.likes),
+          shares: Number(p.shares),
+        })),
+        topSearches: searchRes.data.map((s) => ({
+          query: s.query,
+          count: Number(s.count),
+        })),
+        period,
+      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[Analytics] Engagement analytics report error:', message);
+      return { trend: [], topSearches: [], period };
+    }
   }
 
   private getEmptyAnalytics(period: string) {

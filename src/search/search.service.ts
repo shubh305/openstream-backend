@@ -4,6 +4,7 @@ import { ChannelsRepository } from '../channels/channels.repository';
 import { UsersRepository } from '../users/users.repository';
 import { StreamsRepository } from '../streams/streams.repository';
 import { SemanticSearchService } from './semantic-search.service';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @Injectable()
 export class SearchService {
@@ -13,6 +14,7 @@ export class SearchService {
     private readonly usersRepository: UsersRepository,
     private readonly streamsRepository: StreamsRepository,
     private readonly semanticSearchService: SemanticSearchService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   /**
@@ -100,6 +102,13 @@ export class SearchService {
         };
       }),
     );
+
+    // Track analytics
+    void this.analyticsService.trackEvent('search', undefined, undefined, 1, {
+      query,
+      type: 'standard',
+      results_count: videos.length + channels.length + streams.length,
+    });
 
     return {
       results: {
@@ -208,7 +217,7 @@ export class SearchService {
       }),
     );
 
-    return {
+    const response = {
       results: {
         videos: formattedVideos,
         channels: formattedChannels,
@@ -221,6 +230,15 @@ export class SearchService {
         formattedStreams.length,
       isAI: true,
     };
+
+    // Track analytics
+    void this.analyticsService.trackEvent('search', undefined, undefined, 1, {
+      query,
+      type: 'ai',
+      results_count: response.totalResults,
+    });
+
+    return response;
   }
 
   /**

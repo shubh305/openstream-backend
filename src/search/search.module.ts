@@ -9,6 +9,7 @@ import { VideosModule } from '../videos/videos.module';
 import { ChannelsModule } from '../channels/channels.module';
 import { UsersModule } from '../users/users.module';
 import { StreamsModule } from '../streams/streams.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
 
 import { Video, VideoSchema } from '../videos/schemas/video.schema';
 import { SearchEventsConsumer } from './search-events.consumer';
@@ -20,6 +21,7 @@ import { SearchEventsConsumer } from './search-events.consumer';
     forwardRef(() => ChannelsModule),
     forwardRef(() => UsersModule),
     forwardRef(() => StreamsModule),
+    forwardRef(() => AnalyticsModule),
     MongooseModule.forFeature([{ name: Video.name, schema: VideoSchema }]),
   ],
   controllers: [SearchController, SearchEventsConsumer],

@@ -11,6 +11,7 @@ import {
   CommentLikeDocument,
 } from './schemas/comment-like.schema';
 import { UsersRepository } from '../users/users.repository';
+import { AnalyticsService } from '../analytics/analytics.service';
 import {
   CreateCommentDto,
   UpdateCommentDto,
@@ -26,6 +27,7 @@ export class CommentsService {
     @InjectModel(CommentLike.name)
     private commentLikeModel: Model<CommentLikeDocument>,
     private readonly usersRepository: UsersRepository,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   /**
@@ -105,6 +107,9 @@ export class CommentsService {
     });
 
     await comment.save();
+
+    // Track analytics
+    void this.analyticsService.trackEvent('comment', undefined, videoId, 1);
 
     return this.formatComment(comment, userId);
   }

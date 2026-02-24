@@ -100,45 +100,63 @@ export class VodEventsConsumer {
       return;
     }
 
-    const updateValues: Record<string, unknown> = {
-      status: VideoStatus.PLAYABLE,
-      playableAt: new Date(),
+    // 1. Prepare metadata
+    const metadataUpdate: Record<string, unknown> = {
       'encoding.resolutions': payload.resolutions || ['480p'],
     };
 
     if (payload.hlsManifest480p) {
-      updateValues.hlsManifest = payload.hlsManifest480p;
+      metadataUpdate.hlsManifest = payload.hlsManifest480p;
     }
     if (payload.thumbnailUrl) {
-      updateValues.thumbnailUrl = payload.thumbnailUrl;
+      metadataUpdate.thumbnailUrl = payload.thumbnailUrl;
+      metadataUpdate.posterUrl = payload.thumbnailUrl;
     }
     if (payload.duration) {
-      updateValues.duration = payload.duration;
+      metadataUpdate.duration = payload.duration;
     }
 
-    const update: UpdateQuery<VideoDocument> = { $set: updateValues };
+    await this.videoModel.findByIdAndUpdate(payload.videoId, {
+      $set: metadataUpdate,
+    });
 
-    const filter = {
+    // 2. Update status
+    const statusFilter = {
       _id: new Types.ObjectId(payload.videoId),
-      status: { $ne: VideoStatus.COMPLETE },
+      status: {
+        $in: [
+          VideoStatus.PROCESSING,
+          VideoStatus.UPLOAD_COMPLETE,
+          VideoStatus.UPLOADING,
+        ],
+      },
     };
 
-    const updatedDoc = await this.videoModel.findOneAndUpdate(filter, update, {
-      new: true,
+    const updatedDoc = await this.videoModel.findOneAndUpdate(
+      statusFilter,
+      {
+        $set: {
+          status: VideoStatus.PLAYABLE,
+          playableAt: new Date(),
+        },
+      },
+      { new: true },
+    );
+
+    // Notify via socket
+    this.socketGateway.notifyVideoStatus(payload.videoId, {
+      status: updatedDoc ? VideoStatus.PLAYABLE : VideoStatus.COMPLETE,
+      hlsManifest: payload.hlsManifest480p,
+      thumbnailUrl: payload.thumbnailUrl,
+      duration: payload.duration,
+      resolutions: payload.resolutions || ['480p'],
     });
 
     if (updatedDoc) {
-      this.socketGateway.notifyVideoStatus(payload.videoId, {
-        status: VideoStatus.PLAYABLE,
-        hlsManifest: payload.hlsManifest480p,
-        thumbnailUrl: payload.thumbnailUrl,
-        duration: payload.duration,
-        resolutions: payload.resolutions || ['480p'],
-      });
-      this.logger.log(`Video ${payload.videoId} is now PLAYABLE`);
+      this.logger.log(`Video ${payload.videoId} status updated to PLAYABLE`);
     } else {
       this.logger.log(
-        `Video ${payload.videoId} was already COMPLETE or not found. Skipping PLAYABLE update.`,
+        `Video ${payload.videoId} metadata updated, but status remains terminal (COMPLETE/FAILED).`,
       );
     }
   }
@@ -184,6 +202,7 @@ export class VodEventsConsumer {
 
     if (payload.thumbnailUrl) {
       updateValues.thumbnailUrl = payload.thumbnailUrl;
+      updateValues.posterUrl = payload.thumbnailUrl;
     }
 
     const update: UpdateQuery<VideoDocument> = { $set: updateValues };

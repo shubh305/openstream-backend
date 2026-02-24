@@ -10,6 +10,8 @@ import {
 } from './schemas/video.schema';
 import { VideoLike, VideoLikeDocument } from './schemas/video-like.schema';
 
+import { ConfigService } from '@nestjs/config';
+
 interface VideoFilter {
   channelId?: Types.ObjectId;
   userId?: Types.ObjectId;
@@ -37,6 +39,7 @@ export class VideosRepository {
     @InjectModel(Video.name) private videoModel: Model<VideoDocument>,
     @InjectModel(VideoLike.name)
     private videoLikeModel: Model<VideoLikeDocument>,
+    private readonly configService: ConfigService,
   ) {}
 
   async create(videoData: Partial<Video>): Promise<VideoDocument> {
@@ -49,6 +52,16 @@ export class VideosRepository {
       return null;
     }
     return this.videoModel.findById(id).lean().exec();
+  }
+
+  async findManyByIds(ids: string[]): Promise<VideoDocument[]> {
+    const validIds = ids.filter((id) => Types.ObjectId.isValid(id));
+    if (validIds.length === 0) return [];
+
+    return this.videoModel
+      .find({ _id: { $in: validIds.map((id) => new Types.ObjectId(id)) } })
+      .lean()
+      .exec();
   }
 
   async findMany(
@@ -294,5 +307,31 @@ export class VideosRepository {
         status: VideoStatus.PUBLISHED,
       })
       .exec();
+  }
+
+  public getBaseUrl(): string {
+    const publicUrl = this.configService.get<string>('STORAGE_PUBLIC_URL');
+    const bucket = this.configService.get<string>(
+      'MINIO_BUCKET',
+      'openstream-uploads',
+    );
+
+    if (publicUrl) {
+      return `${publicUrl.replace(/\/$/, '')}/${bucket}`;
+    }
+
+    const endpoint = this.configService.get<string>('MINIO_ENDPOINT');
+    const port = this.configService.get<string>('MINIO_PORT', '9000');
+
+    if (!endpoint) return '';
+
+    if (endpoint.startsWith('http')) {
+      return `${endpoint.replace(/\/$/, '')}/${bucket}`;
+    }
+
+    const protocol = port === '443' ? 'https' : 'http';
+    const portSuffix = port === '443' || port === '80' ? '' : `:${port}`;
+
+    return `${protocol}://${endpoint}${portSuffix}/${bucket}`;
   }
 }

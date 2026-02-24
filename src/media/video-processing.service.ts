@@ -15,6 +15,7 @@ interface VideoPlayablePayload {
   hlsManifest480p: string;
   duration: number;
   thumbnailUrl: string;
+  resolutions?: string[];
 }
 
 interface VideoCompletePayload {
@@ -23,6 +24,7 @@ interface VideoCompletePayload {
   resolutions: string[];
   crf: number;
   complexityScore: number;
+  thumbnailUrl?: string;
 }
 
 @Injectable()
@@ -124,7 +126,8 @@ export class VideoProcessingService {
       hlsManifest: hlsManifest480p,
       duration,
       thumbnailUrl,
-      'encoding.resolutions': ['480p'],
+      posterUrl: thumbnailUrl,
+      'encoding.resolutions': payload.resolutions || ['480p'],
     } as any);
   }
 
@@ -140,6 +143,12 @@ export class VideoProcessingService {
       'encoding.resolutions': resolutions,
       'encoding.crf': crf,
       'encoding.complexityScore': complexityScore,
+      ...(payload.thumbnailUrl
+        ? {
+            thumbnailUrl: payload.thumbnailUrl,
+            posterUrl: payload.thumbnailUrl,
+          }
+        : {}),
     } as any);
   }
 

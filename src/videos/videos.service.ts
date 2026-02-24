@@ -324,6 +324,11 @@ export class VideosService {
       'view',
       video.channelId.toString(),
       id,
+      1,
+      {
+        title: video.title,
+        thumbnail_url: video.thumbnailUrl,
+      },
     );
   }
 
@@ -430,7 +435,7 @@ export class VideosService {
       throw new NotFoundException('Video not found');
     }
 
-    const baseUrl = this.getBaseUrl();
+    const baseUrl = this.videosRepository.getBaseUrl();
     const fixRelative = (url: string | undefined | null) => {
       if (!url) return '';
       return url.startsWith('http') ? url : `${baseUrl}/${url}`;
@@ -460,7 +465,7 @@ export class VideosService {
       throw new NotFoundException('Video not found');
     }
 
-    const baseUrl = this.getBaseUrl();
+    const baseUrl = this.videosRepository.getBaseUrl();
 
     const tracks: {
       lang: string;
@@ -527,7 +532,7 @@ export class VideosService {
       throw new NotFoundException('Video not found');
     }
 
-    const baseUrl = this.getBaseUrl();
+    const baseUrl = this.videosRepository.getBaseUrl();
 
     const fixLegacyUrl = (url: string | null) => {
       if (!url) return url;
@@ -576,7 +581,7 @@ export class VideosService {
       this.commentsService.countByVideoId(video._id.toString()),
     ]);
 
-    const baseUrl = this.getBaseUrl();
+    const baseUrl = this.videosRepository.getBaseUrl();
     const fixRelative = (url: string | undefined | null) => {
       if (!url) return '';
       return url.startsWith('http') ? url : `${baseUrl}/${url}`;
@@ -614,7 +619,7 @@ export class VideosService {
       video._id.toString(),
     );
 
-    const baseUrl = this.getBaseUrl();
+    const baseUrl = this.videosRepository.getBaseUrl();
     const fixRelative = (url: string | undefined | null) => {
       if (!url) return '';
       return url.startsWith('http') ? url : `${baseUrl}/${url}`;
@@ -699,31 +704,5 @@ export class VideosService {
       return `${(count / 1000).toFixed(1)}K`;
     }
     return count.toString();
-  }
-
-  public getBaseUrl(): string {
-    const publicUrl = this.configService.get<string>('STORAGE_PUBLIC_URL');
-    const bucket = this.configService.get<string>(
-      'MINIO_BUCKET',
-      'openstream-uploads',
-    );
-
-    if (publicUrl) {
-      return `${publicUrl.replace(/\/$/, '')}/${bucket}`;
-    }
-
-    const endpoint = this.configService.get<string>('MINIO_ENDPOINT');
-    const port = this.configService.get<string>('MINIO_PORT', '9000');
-
-    if (!endpoint) return '';
-
-    if (endpoint.startsWith('http')) {
-      return `${endpoint.replace(/\/$/, '')}/${bucket}`;
-    }
-
-    const protocol = port === '443' ? 'https' : 'http';
-    const portSuffix = port === '443' || port === '80' ? '' : `:${port}`;
-
-    return `${protocol}://${endpoint}${portSuffix}/${bucket}`;
   }
 }
