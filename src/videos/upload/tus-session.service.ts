@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, UpdateQuery } from 'mongoose';
 import { nanoid } from 'nanoid';
 import { Video, VideoDocument, VideoStatus } from '../schemas/video.schema';
 
@@ -78,13 +78,22 @@ export class TusSessionService {
   /**
    * Mark a session as complete. Updates the video status to UPLOAD_COMPLETE.
    */
-  async completeSession(sessionId: string): Promise<TusSession | undefined> {
+  async completeSession(
+    sessionId: string,
+    storagePath?: string,
+  ): Promise<TusSession | undefined> {
     const session = this.sessions.get(sessionId);
     if (!session) return undefined;
 
-    await this.videoModel.findByIdAndUpdate(session.videoId, {
+    const update: UpdateQuery<VideoDocument> = {
       status: VideoStatus.UPLOAD_COMPLETE,
-    });
+    };
+
+    if (storagePath) {
+      update.videoUrl = storagePath;
+    }
+
+    await this.videoModel.findByIdAndUpdate(session.videoId, update);
 
     this.logger.log(
       `Completed TUS session ${sessionId} for video ${session.videoId}`,

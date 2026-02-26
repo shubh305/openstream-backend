@@ -74,7 +74,7 @@ export class TusMiddleware implements NestMiddleware, OnModuleInit {
         const sessionId = upload.metadata?.sessionId;
         if (sessionId) {
           const session: TusSession | undefined =
-            await this.sessionService.completeSession(sessionId);
+            await this.sessionService.completeSession(sessionId, upload.id);
           if (session) {
             const transcodePayload: TranscodePayload = {
               videoId: session.videoId,

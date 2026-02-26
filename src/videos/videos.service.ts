@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { VideosRepository, VideoQueryOptions } from './videos.repository';
@@ -9,6 +10,7 @@ import { ChannelsRepository } from '../channels/channels.repository';
 import { UsersRepository } from '../users/users.repository';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { CommentsService } from '../comments/comments.service';
+import { StorageService } from '../storage/storage.service';
 import {
   CreateVideoDto,
   UpdateVideoDto,
@@ -34,6 +36,8 @@ interface UserDoc {
 
 @Injectable()
 export class VideosService {
+  private readonly logger = new Logger(VideosService.name);
+
   constructor(
     private readonly videosRepository: VideosRepository,
     private readonly channelsRepository: ChannelsRepository,
@@ -41,6 +45,7 @@ export class VideosService {
     private readonly analyticsService: AnalyticsService,
     private readonly commentsService: CommentsService,
     private readonly configService: ConfigService,
+    private readonly storageService: StorageService,
   ) {}
 
   /**
@@ -298,11 +303,40 @@ export class VideosService {
 
     await this.videosRepository.delete(id);
 
+    // Cleanup files from storage
+    this.cleanupVideoFiles(id, video).catch((err) => {
+      this.logger.error(`Failed to cleanup files for video ${id}:`, err);
+    });
+
     // Decrement channel video count
     await this.channelsRepository.incrementVideoCount(
       video.channelId.toString(),
       -1,
     );
+  }
+
+  /**
+   * Cleanup all files associated with a video from storage
+   */
+  private async cleanupVideoFiles(
+    videoId: string,
+    video: VideoDocument,
+  ): Promise<void> {
+    const bucket =
+      this.configService.get<string>('MINIO_BUCKET') || 'openstream-uploads';
+
+    try {
+      await this.storageService.delete(bucket, `vod/${videoId}`, true);
+      await this.storageService.delete(bucket, `highlights/${videoId}`, true);
+      await this.storageService.delete(bucket, `subtitles/${videoId}`, true);
+
+      if (video.videoUrl && !video.videoUrl.includes(`vod/${videoId}`)) {
+        const key = video.videoUrl.split(`${bucket}/`).pop() || video.videoUrl;
+        await this.storageService.delete(bucket, key, false);
+      }
+    } catch (error) {
+      this.logger.error(`Cleanup failed for video ${videoId}:`, error);
+    }
   }
 
   /**

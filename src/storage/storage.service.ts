@@ -17,6 +17,12 @@ interface StorageGrpcService {
     key: string;
     expiry?: number;
   }): Observable<{ url: string }>;
+
+  delete(data: {
+    bucket: string;
+    key: string;
+    isFolder: boolean;
+  }): Observable<{ success: boolean; deletedCount: number }>;
 }
 
 @Injectable()
@@ -73,6 +79,36 @@ export class StorageService implements OnModuleInit {
     } catch (error) {
       this.logger.warn(`Failed to sign URL for ${key}: ${error}`);
       return '';
+    }
+  }
+
+  async delete(
+    bucket: string,
+    key: string,
+    isFolder: boolean = false,
+  ): Promise<boolean> {
+    try {
+      this.logger.log(
+        `Deleting ${isFolder ? 'folder' : 'file'} ${key} from bucket ${bucket} via gRPC...`,
+      );
+      const response = await lastValueFrom<{
+        success: boolean;
+        deletedCount: number;
+      }>(
+        this.storageGrpcService.delete({
+          bucket,
+          key,
+          isFolder,
+        }),
+      );
+      this.logger.log(
+        `Delete successful. Objects removed: ${response.deletedCount}`,
+      );
+      return response.success;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to delete objects via gRPC: ${msg}`);
+      return false;
     }
   }
 }
